@@ -1,196 +1,185 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
+import { useLanguage } from "../../../../lib/useLanguage";
 
-type TithingConfig = {
-  payment_instructions: string | null;
-  bank_name: string | null;
-  account_number: string | null;
-  account_name: string | null;
-  mobile_money: string | null;
-  accepts_tithe: boolean;
-  accepts_offering: boolean;
-  accepts_donation: boolean;
+type PaymentSetting = {
+  id: string;
+  method: string;
+  label: string | null;
+  config: Record<string, string>;
+  instructions: string | null;
 };
 
 type Donation = {
   id: string;
   amount: number;
   currency: string;
-  type: string;
-  note: string | null;
-  payment_reference: string | null;
+  method: string;
+  give_type: string | null;
+  status: string;
+  reference: string | null;
   created_at: string;
 };
 
 type Church = {
   id: string;
   name: string;
-  avatar_url?: string | null;
+  verification_status: string | null;
+};
+
+const CURRENCIES = ["USD", "EUR", "GBP", "NGN", "KES", "ZAR", "GHS", "XAF", "XOF"];
+
+const STATUS_COLORS: Record<string, string> = {
+  pending:   "bg-yellow-100 text-yellow-700",
+  confirmed: "bg-green-100 text-green-700",
+  rejected:  "bg-red-100 text-red-700",
 };
 
 export default function TithePage() {
-  const params = useParams();
-  const router = useRouter();
+  const params   = useParams();
+  const router   = useRouter();
   const churchId = params.id as string;
+  const { t, lang } = useLanguage();
+  const isFr = lang === "fr";
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isChurchAdmin, setIsChurchAdmin] = useState(false);
-  const [isMember, setIsMember] = useState(false);
-  const [church, setChurch] = useState<Church | null>(null);
-  const [config, setConfig] = useState<TithingConfig | null>(null);
-  const [myDonations, setMyDonations] = useState<Donation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uiMessage, setUiMessage] = useState("");
+  const [isMember, setIsMember]           = useState(false);
+  const [church, setChurch]               = useState<Church | null>(null);
+  const [methods, setMethods]             = useState<PaymentSetting[]>([]);
+  const [myDonations, setMyDonations]     = useState<Donation[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [uiMessage, setUiMessage]         = useState("");
 
-  // Give form
-  const [giving, setGiving] = useState(false);
-  const [giveType, setGiveType] = useState<"tithe" | "offering" | "donation">("tithe");
-  const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [note, setNote] = useState("");
-  const [payRef, setPayRef] = useState("");
+  const [giveType, setGiveType]       = useState<"tithe" | "offering" | "donation">("tithe");
+  const [selectedMethod, setSelectedMethod] = useState<string>("");
+  const [amount, setAmount]           = useState("");
+  const [currency, setCurrency]       = useState("USD");
+  const [reference, setReference]     = useState("");
+  const [note, setNote]               = useState("");
+  const [submitting, setSubmitting]   = useState(false);
   const [giveSuccess, setGiveSuccess] = useState(false);
 
-  // Admin tithing setup form
-  const [setupMode, setSetupMode] = useState(false);
-  const [bankName, setBankName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [accountName, setAccountName] = useState("");
-  const [mobileMoney, setMobileMoney] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [savingConfig, setSavingConfig] = useState(false);
-
-  useEffect(() => {
-    loadPage();
-  }, [churchId]);
-
-  async function loadPage() {
+  const load = useCallback(async () => {
     setLoading(true);
     const { data: authData } = await supabase.auth.getUser();
     const me = authData.user?.id;
     if (!me) { router.push("/login"); return; }
     setCurrentUserId(me);
 
-    const { data: churchData } = await supabase
-      .from("churches")
-      .select("id, name")
-      .eq("id", churchId)
-      .maybeSingle();
-    setChurch(churchData);
+    const [churchRes, profileRes, memberRes, methodsRes, donRes] = await Promise.all([
+      supabase.from("churches").select("id, name, verification_status").eq("id", churchId).maybeSingle(),
+      supabase.from("profiles").select("role, church_id").eq("id", me).maybeSingle(),
+      supabase.from("church_memberships").select("status").eq("church_id", churchId).eq("user_id", me).maybeSingle(),
+      supabase.from("payment_settings").select("id, method, label, config, instructions").eq("owner_type", "church").eq("owner_id", churchId).eq("enabled", true),
+      supabase.from("donations").select("id, amount, currency, method, give_type, status, reference, created_at").eq("target_type", "church").eq("target_id", churchId).eq("donor_id", me).order("created_at", { ascending: false }),
+    ]);
 
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("role, church_id")
-      .eq("id", me)
-      .maybeSingle();
+    setChurch(churchRes.data ?? null);
 
-    const isAdmin = profileData?.role === "church_admin" && profileData?.church_id === churchId;
-    setIsChurchAdmin(isAdmin);
+    const admin = profileRes.data?.role === "church_admin" && profileRes.data?.church_id === churchId;
+    setIsChurchAdmin(admin);
+    setIsMember(memberRes.data?.status === "member" || admin);
 
-    const { data: memberData } = await supabase
-      .from("church_memberships")
-      .select("status")
-      .eq("church_id", churchId)
-      .eq("user_id", me)
-      .maybeSingle();
+    const loaded = (methodsRes.data as PaymentSetting[]) ?? [];
+    setMethods(loaded);
+    if (loaded.length > 0 && !selectedMethod) setSelectedMethod(loaded[0].method);
 
-    setIsMember(memberData?.status === "member" || isAdmin);
-
-    const { data: configData } = await supabase
-      .from("tithing_configs")
-      .select("*")
-      .eq("church_id", churchId)
-      .maybeSingle();
-    setConfig(configData);
-
-    if (configData) {
-      setBankName(configData.bank_name || "");
-      setAccountNumber(configData.account_number || "");
-      setAccountName(configData.account_name || "");
-      setMobileMoney(configData.mobile_money || "");
-      setInstructions(configData.payment_instructions || "");
-    }
-
-    const { data: donationsData } = await supabase
-      .from("donations")
-      .select("*")
-      .eq("church_id", churchId)
-      .eq("user_id", me)
-      .order("created_at", { ascending: false });
-    setMyDonations(donationsData || []);
-
+    setMyDonations((donRes.data as Donation[]) ?? []);
     setLoading(false);
-  }
+  }, [churchId, router, selectedMethod]);
 
-  const saveConfig = async () => {
-    if (!isChurchAdmin) return;
-    setSavingConfig(true);
+  useEffect(() => { load(); }, [churchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const payload = {
-      church_id: churchId,
-      bank_name: bankName || null,
-      account_number: accountNumber || null,
-      account_name: accountName || null,
-      mobile_money: mobileMoney || null,
-      payment_instructions: instructions || null,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error } = await supabase
-      .from("tithing_configs")
-      .upsert([payload], { onConflict: "church_id" });
-
-    setSavingConfig(false);
-    if (!error) {
-      setSetupMode(false);
-      setUiMessage("Payment settings saved.");
-      await loadPage();
-    } else {
-      setUiMessage(error.message);
-    }
-  };
-
-  const submitDonation = async () => {
-    if (!currentUserId || !amount || parseFloat(amount) <= 0) return;
-    setGiving(true);
+  const submitGiving = async () => {
+    if (!currentUserId || !selectedMethod || !amount || parseFloat(amount) <= 0) return;
+    setSubmitting(true);
+    setUiMessage("");
 
     const { error } = await supabase.from("donations").insert([{
-      church_id: churchId,
-      user_id: currentUserId,
-      amount: parseFloat(amount),
+      donor_id:    currentUserId,
+      target_type: "church",
+      target_id:   churchId,
+      give_type:   giveType,
+      amount:      parseFloat(amount),
       currency,
-      type: giveType,
-      note: note || null,
-      payment_reference: payRef || null,
+      method:      selectedMethod,
+      status:      "pending",
+      reference:   reference || null,
+      note:        note || null,
     }]);
 
-    setGiving(false);
-    if (!error) {
-      setAmount("");
-      setNote("");
-      setPayRef("");
-      setGiveSuccess(true);
-      setUiMessage("");
-      await loadPage();
-      setTimeout(() => setGiveSuccess(false), 3000);
-    } else {
-      setUiMessage(error.message);
-    }
+    setSubmitting(false);
+    if (error) { setUiMessage(error.message); return; }
+    setAmount(""); setReference(""); setNote("");
+    setGiveSuccess(true);
+    await load();
+    setTimeout(() => setGiveSuccess(false), 4000);
   };
 
-  const formatCurrency = (amt: number, cur: string) =>
+  const methodName = (m: string): string => {
+    const map: Record<string, string> = {
+      paypal:       t("pay_method_paypal"),
+      mobile_money: t("pay_method_mobile"),
+      bank:         t("pay_method_bank"),
+      stripe:       t("pay_method_card"),
+    };
+    return map[m] ?? m;
+  };
+
+  const renderMethodDetails = (setting: PaymentSetting) => {
+    const cfg = setting.config;
+    const m = setting.method;
+    return (
+      <div className="space-y-1.5 text-sm">
+        {m === "paypal" && (
+          <>
+            {cfg.email && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">Email</span><a href={`mailto:${cfg.email}`} className="font-medium text-amber-600 hover:underline">{cfg.email}</a></div>}
+            {cfg.link  && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">PayPal.me</span><a href={cfg.link} target="_blank" rel="noopener noreferrer" className="font-medium text-amber-600 hover:underline">{cfg.link}</a></div>}
+          </>
+        )}
+        {m === "mobile_money" && (
+          <>
+            {cfg.provider && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">{isFr ? "Opérateur" : "Provider"}</span><span className="font-medium text-gray-900">{cfg.provider}</span></div>}
+            {cfg.name     && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">{isFr ? "Nom" : "Name"}</span><span className="font-medium text-gray-900">{cfg.name}</span></div>}
+            {cfg.phone    && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">{isFr ? "Numéro" : "Phone"}</span><span className="font-mono font-medium text-gray-900">{cfg.phone}</span></div>}
+            {cfg.country  && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">{isFr ? "Pays" : "Country"}</span><span className="font-medium text-gray-900">{cfg.country}</span></div>}
+          </>
+        )}
+        {m === "bank" && (
+          <>
+            {cfg.bank_name      && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">{isFr ? "Banque" : "Bank"}</span><span className="font-medium text-gray-900">{cfg.bank_name}</span></div>}
+            {cfg.account_name   && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">{isFr ? "Titulaire" : "Holder"}</span><span className="font-medium text-gray-900">{cfg.account_name}</span></div>}
+            {cfg.account_number && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">{isFr ? "Numéro" : "Account"}</span><span className="font-mono font-medium text-gray-900">{cfg.account_number}</span></div>}
+            {cfg.routing_iban   && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">IBAN / Routing</span><span className="font-mono font-medium text-gray-900">{cfg.routing_iban}</span></div>}
+            {cfg.swift          && <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"><span className="text-gray-500">SWIFT / BIC</span><span className="font-mono font-medium text-gray-900">{cfg.swift}</span></div>}
+          </>
+        )}
+        {m === "stripe" && (
+          <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">{t("pay_admin_stripe_note")}</div>
+        )}
+        {setting.instructions && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{setting.instructions}</p>
+        )}
+      </div>
+    );
+  };
+
+  const fmt = (amt: number, cur: string) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: cur }).format(amt);
 
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" />
       </div>
     );
   }
+
+  const isVerified = church?.verification_status === "approved";
 
   return (
     <main className="min-h-screen bg-gray-50 pb-10">
@@ -199,246 +188,220 @@ export default function TithePage() {
         <button
           onClick={() => router.back()}
           className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+          aria-label={t("common_back")}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
         <div>
-          <h1 className="font-bold text-gray-900">Give to {church?.name || "Church"}</h1>
-          <p className="text-xs text-gray-500">Tithes, Offerings & Donations</p>
+          <h1 className="font-bold text-gray-900">
+            {isFr ? `Donner à ${church?.name ?? "l'église"}` : `Give to ${church?.name ?? "Church"}`}
+          </h1>
+          <p className="text-xs text-gray-500">
+            {isFr ? "Dîmes, offrandes & dons" : "Tithes, offerings & donations"}
+          </p>
         </div>
+
+        {/* Admin link */}
+        {isChurchAdmin && (
+          <button
+            onClick={() => router.push(`/church/${churchId}/payments`)}
+            className="ml-auto flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            {isFr ? "Config" : "Setup"}
+          </button>
+        )}
       </div>
 
-      <div className="mx-auto max-w-lg px-4 pt-6 space-y-6">
+      <div className="mx-auto max-w-lg px-4 pt-6 space-y-5">
         {uiMessage && (
-          <div className={`rounded-xl px-4 py-3 text-sm ${uiMessage.toLowerCase().includes("saved") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
-            {uiMessage}
+          <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{uiMessage}</div>
+        )}
+
+        {/* Unverified notice */}
+        {!isVerified && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <p className="font-semibold text-amber-800">{t("pay_unverified_short")}</p>
+            <p className="mt-1 text-sm text-amber-700">{t("pay_unverified")}</p>
           </div>
         )}
-        {/* No config yet */}
-        {!config && !isChurchAdmin && (
+
+        {/* Payment methods display */}
+        {isVerified && methods.length > 0 && (
+          <div className="rounded-2xl bg-white p-5 shadow-sm space-y-4">
+            <h2 className="font-bold text-gray-900">
+              {isFr ? "Détails de paiement" : "Payment Details"}
+            </h2>
+            {methods.map((setting) => (
+              <div key={setting.id}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  {setting.label || methodName(setting.method)}
+                </p>
+                {renderMethodDetails(setting)}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* No methods set up yet */}
+        {isVerified && methods.length === 0 && !isChurchAdmin && (
           <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
-            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 text-3xl">
-              🏦
-            </div>
-            <p className="font-semibold text-gray-800">Payment not set up yet</p>
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 text-2xl">🏦</div>
+            <p className="font-semibold text-gray-800">
+              {isFr ? "Paiement non configuré" : "Payment not set up yet"}
+            </p>
             <p className="mt-1 text-sm text-gray-400">
-              The church admin has not configured payment details yet.
+              {isFr ? "L'administrateur n'a pas encore configuré les détails de paiement." : "The church admin has not configured payment details yet."}
             </p>
           </div>
         )}
 
-        {/* Admin setup button */}
-        {isChurchAdmin && !setupMode && (
-          <button
-            onClick={() => setSetupMode(true)}
-            className="flex w-full items-center justify-between rounded-2xl bg-white p-4 shadow-sm"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xl">⚙️</div>
-              <div className="text-left">
-                <p className="font-semibold text-gray-900">{config ? "Edit Payment Setup" : "Set Up Tithing"}</p>
-                <p className="text-xs text-gray-400">{config ? "Bank, mobile money details" : "Add payment details for members"}</p>
-              </div>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
-        )}
-
-        {/* Admin setup form */}
-        {isChurchAdmin && setupMode && (
+        {/* Give form — members only, verified church, at least one method */}
+        {isVerified && (isMember || isChurchAdmin) && methods.length > 0 && (
           <div className="rounded-2xl bg-white p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-gray-900">Payment Setup</h2>
-              <button onClick={() => setSetupMode(false)} className="text-sm text-gray-400">Cancel</button>
-            </div>
-
-            {[
-              { label: "Bank Name", value: bankName, set: setBankName, placeholder: "e.g. First National Bank" },
-              { label: "Account Name", value: accountName, set: setAccountName, placeholder: "Name on the account" },
-              { label: "Account Number", value: accountNumber, set: setAccountNumber, placeholder: "Bank account number" },
-              { label: "Mobile Money (M-Pesa, etc.)", value: mobileMoney, set: setMobileMoney, placeholder: "e.g. M-Pesa: +254 700 000 000" },
-            ].map((f) => (
-              <div key={f.label}>
-                <label className="mb-1 block text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</label>
-                <input
-                  type="text"
-                  value={f.value}
-                  onChange={(e) => f.set(e.target.value)}
-                  placeholder={f.placeholder}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
-                />
-              </div>
-            ))}
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-500 uppercase tracking-wide">Additional Instructions</label>
-              <textarea
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                rows={3}
-                placeholder="Any special instructions for payment..."
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
-              />
-            </div>
-
-            <button
-              onClick={saveConfig}
-              disabled={savingConfig}
-              className="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:bg-blue-400"
-            >
-              {savingConfig ? "Saving..." : "Save Payment Details"}
-            </button>
-          </div>
-        )}
-
-        {/* Payment info card */}
-        {config && (config.bank_name || config.account_number || config.mobile_money || config.payment_instructions) && (
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-bold text-gray-900 flex items-center gap-2">
-              <span className="text-xl">🏦</span> Payment Details
+            <h2 className="font-bold text-gray-900">
+              {isFr ? "Enregistrer mon don" : "Record My Giving"}
             </h2>
-            <div className="space-y-2 text-sm">
-              {config.bank_name && (
-                <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-gray-500">Bank</span>
-                  <span className="font-medium text-gray-900">{config.bank_name}</span>
-                </div>
-              )}
-              {config.account_name && (
-                <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-gray-500">Account Name</span>
-                  <span className="font-medium text-gray-900">{config.account_name}</span>
-                </div>
-              )}
-              {config.account_number && (
-                <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-gray-500">Account No.</span>
-                  <span className="font-medium text-gray-900 font-mono">{config.account_number}</span>
-                </div>
-              )}
-              {config.mobile_money && (
-                <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-gray-500">Mobile Money</span>
-                  <span className="font-medium text-gray-900">{config.mobile_money}</span>
-                </div>
-              )}
-              {config.payment_instructions && (
-                <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  {config.payment_instructions}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* Give form — only for members */}
-        {isMember && config && (
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <h2 className="mb-4 font-bold text-gray-900">Record Your Giving</h2>
-
-            {/* Type selector */}
-            <div className="mb-4 flex gap-2">
-              {(["tithe", "offering", "donation"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setGiveType(t)}
-                  className={`flex-1 rounded-xl py-2 text-sm font-semibold capitalize transition-colors ${
-                    giveType === t ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
+            <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
+              {t("pay_pending_notice")}
             </div>
 
-            <div className="space-y-3">
-              {/* Amount + currency */}
+            {/* Give type selector */}
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {t("pay_give_type")}
+              </label>
               <div className="flex gap-2">
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                >
-                  {["USD", "EUR", "GBP", "NGN", "KES", "ZAR", "GHS", "XAF", "XOF"].map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  min="0"
-                  step="0.01"
-                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
-                />
+                {(["tithe", "offering", "donation"] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setGiveType(type)}
+                    className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${
+                      giveType === type ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {type === "tithe" ? t("pay_give_tithe") : type === "offering" ? t("pay_give_offering") : t("pay_give_donation")}
+                  </button>
+                ))}
               </div>
-
-              <input
-                type="text"
-                value={payRef}
-                onChange={(e) => setPayRef(e.target.value)}
-                placeholder="Payment reference / transaction ID (optional)"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
-              />
-
-              <input
-                type="text"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Note (optional)"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
-              />
-
-              {giveSuccess && (
-                <div className="rounded-xl bg-green-50 px-3 py-2.5 text-sm font-medium text-green-700">
-                  ✓ Your giving has been recorded. God bless you!
-                </div>
-              )}
-
-              <button
-                onClick={submitDonation}
-                disabled={giving || !amount || parseFloat(amount) <= 0}
-                className="w-full rounded-xl bg-blue-600 py-3 font-bold text-white disabled:bg-blue-300"
-              >
-                {giving ? "Recording..." : `Record ${giveType.charAt(0).toUpperCase() + giveType.slice(1)}`}
-              </button>
             </div>
-          </div>
-        )}
 
-        {!isMember && config && !isChurchAdmin && (
-          <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
-            <p className="text-sm text-gray-500">You must be a church member to record giving.</p>
+            {/* Method selector */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {t("pay_method_select")}
+              </label>
+              <select
+                value={selectedMethod}
+                onChange={(e) => setSelectedMethod(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400"
+              >
+                {methods.map((m) => (
+                  <option key={m.id} value={m.method}>
+                    {m.label || methodName(m.method)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Amount + currency */}
+            <div className="flex gap-2">
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400"
+              >
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+              />
+            </div>
+
+            <input
+              type="text"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder={t("pay_reference")}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+            />
+
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={t("pay_note_label")}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+            />
+
+            {giveSuccess && (
+              <div className="rounded-xl bg-green-50 px-3 py-2.5 text-sm font-medium text-green-700">
+                {t("pay_record_success")}
+              </div>
+            )}
+
             <button
-              onClick={() => router.back()}
-              className="mt-3 text-sm font-semibold text-blue-600"
+              onClick={submitGiving}
+              disabled={submitting || !selectedMethod || !amount || parseFloat(amount) <= 0}
+              className="w-full rounded-xl bg-amber-500 py-3 font-bold text-white hover:bg-amber-600 disabled:opacity-60"
             >
-              Request membership from the church profile
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  {isFr ? "Enregistrement…" : "Recording…"}
+                </span>
+              ) : t("pay_sent_button")}
             </button>
           </div>
         )}
 
-        {/* My giving history */}
+        {/* Non-member gate */}
+        {isVerified && !isMember && !isChurchAdmin && methods.length > 0 && (
+          <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
+            <p className="text-sm text-gray-500">
+              {isFr ? "Vous devez être membre pour enregistrer un don." : "You must be a church member to record giving."}
+            </p>
+            <button onClick={() => router.back()} className="mt-3 text-sm font-semibold text-amber-600">
+              {isFr ? "Demander l'adhésion depuis le profil de l'église" : "Request membership from the church profile"}
+            </button>
+          </div>
+        )}
+
+        {/* Giving history */}
         {myDonations.length > 0 && (
           <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-bold text-gray-900">My Giving History</h2>
+            <h2 className="mb-3 font-bold text-gray-900">{t("pay_my_history")}</h2>
             <div className="space-y-2">
               {myDonations.map((d) => (
                 <div key={d.id} className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5">
                   <div>
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold capitalize text-blue-700">{d.type}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold capitalize text-amber-700">
+                        {d.give_type ?? t("pay_give_donation")}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLORS[d.status] ?? "bg-gray-100 text-gray-600"}`}>
+                        {d.status === "pending" ? t("pay_status_pending") : d.status === "confirmed" ? t("pay_status_confirmed") : t("pay_status_rejected")}
+                      </span>
+                    </div>
                     <p className="mt-0.5 text-xs text-gray-400">
                       {new Date(d.created_at).toLocaleDateString()}
-                      {d.payment_reference && ` · Ref: ${d.payment_reference}`}
+                      {d.reference ? ` · ${d.reference}` : ""}
+                      {" · "}{methodName(d.method)}
                     </p>
                   </div>
-                  <p className="font-bold text-gray-900">{formatCurrency(d.amount, d.currency)}</p>
+                  <p className="font-bold text-gray-900">{fmt(d.amount, d.currency)}</p>
                 </div>
               ))}
             </div>
