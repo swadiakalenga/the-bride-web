@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { useLanguage } from "../../lib/useLanguage";
 
 type ConversationRow = {
   id: string;
@@ -40,6 +41,7 @@ function formatConvTime(dateStr: string | null) {
 
 export default function MessagesPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [tab, setTab] = useState<"chats" | "requests">("chats");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
@@ -295,34 +297,17 @@ export default function MessagesPage() {
       }
     }
 
-    // Create new conversation
-    const { data: convData, error: convError } = await supabase
-      .from("conversations")
-      .insert([{}])
-      .select("id")
-      .single();
+    // Use SECURITY DEFINER RPC — no message needed yet, user will type in the chat
+    const { data: convId, error: convError } = await supabase
+      .rpc("create_direct_conversation", { p_other_user_id: targetUser.id });
 
-    if (convError || !convData) {
+    if (convError || !convId) {
       setPageError(`Could not start conversation: ${convError?.message || "unknown error"}`);
       return;
     }
 
-    // Insert participants sequentially — batch insert violates RLS (same-statement visibility).
-    const { error: p1Error } = await supabase
-      .from("conversation_participants")
-      .insert({ conversation_id: convData.id, user_id: currentUserId });
-
-    if (p1Error) {
-      setPageError(`Could not add participants: ${p1Error.message}`);
-      return;
-    }
-
-    await supabase
-      .from("conversation_participants")
-      .insert({ conversation_id: convData.id, user_id: targetUser.id });
-
     setShowNewConv(false);
-    router.push(`/messages/${convData.id}`);
+    router.push(`/messages/${convId}`);
   };
 
   const avatarLetter = (name: string | null) =>
@@ -349,7 +334,7 @@ export default function MessagesPage() {
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-gray-900">Messages</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t("messages_title")}</h1>
         </div>
 
         {/* New conversation button */}
@@ -414,10 +399,8 @@ export default function MessagesPage() {
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
                 </div>
-                <p className="font-semibold text-gray-800">No conversations yet</p>
-                <p className="mt-1 text-sm text-gray-400">
-                  Go to someone&apos;s profile and tap Message to start chatting.
-                </p>
+                <p className="font-semibold text-gray-800">{t("messages_no_conversations")}</p>
+                <p className="mt-1 text-sm text-gray-400">{t("messages_no_conversations_desc")}</p>
               </div>
             ) : (
               <div>
@@ -530,7 +513,7 @@ export default function MessagesPage() {
                         disabled={actionLoading === req.id}
                         className="flex-1 rounded-lg bg-amber-400 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:bg-amber-200"
                       >
-                        {actionLoading === req.id ? "..." : "Accept"}
+                        {actionLoading === req.id ? "…" : t("messages_accept")}
                       </button>
                       <button
                         onClick={() => ignoreRequest(req.id)}

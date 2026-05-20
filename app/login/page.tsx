@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { useLanguage } from "../../lib/useLanguage";
+import type { Lang } from "../../lib/i18n";
 import Logo from "../components/ui/Logo";
 
 export default function LoginPage() {
+  const { lang, setLang, t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -31,6 +34,21 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
+      {/* Language picker */}
+      <div className="absolute right-4 top-4 flex gap-1">
+        {(["fr", "en"] as Lang[]).map((l) => (
+          <button
+            key={l}
+            onClick={() => setLang(l)}
+            className={`rounded px-2 py-1 text-xs font-semibold uppercase ${
+              lang === l ? "bg-amber-100 text-amber-700" : "text-gray-400 hover:text-gray-700"
+            }`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
       {/* Logo area */}
       <div className="mb-8 flex flex-col items-center">
         <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-blue-500 shadow-lg">
@@ -44,12 +62,12 @@ export default function LoginPage() {
 
       {/* Card */}
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm border border-gray-100">
-        <h2 className="mb-1 text-xl font-bold text-gray-900">Welcome back</h2>
-        <p className="mb-6 text-sm text-gray-500">Sign in to your account</p>
+        <h2 className="mb-1 text-xl font-bold text-gray-900">{t("login_title")}</h2>
+        <p className="mb-6 text-sm text-gray-500">TheBride</p>
 
         <form className="space-y-4" onSubmit={handleLogin}>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Email</label>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("login_email")}</label>
             <input
               type="email"
               placeholder="you@example.com"
@@ -61,10 +79,10 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Password</label>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("login_password")}</label>
             <input
               type="password"
-              placeholder="Your password"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-100"
@@ -77,7 +95,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-3 font-semibold text-white shadow-sm transition hover:from-amber-500 hover:to-amber-600 disabled:opacity-60"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? "…" : t("login_submit")}
           </button>
 
           {message && (
@@ -88,11 +106,10 @@ export default function LoginPage() {
         </form>
       </div>
 
-      {/* Register link */}
       <p className="mt-6 text-sm text-gray-500">
-        New to TheBride?{" "}
+        {t("login_no_account")}{" "}
         <a href="/register" className="font-semibold text-amber-500 hover:text-amber-600">
-          Create an account
+          {t("login_register_link")}
         </a>
       </p>
     </main>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
+import { useLanguage } from "../../../../lib/useLanguage";
 
 type MemberRow = {
   id: string;
@@ -17,10 +18,10 @@ type MemberRow = {
 export default function MembersPage() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useLanguage();
   const churchId = params.id as string;
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [pending, setPending] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +49,6 @@ export default function MembersPage() {
       router.push("/profile");
       return;
     }
-    setIsAdmin(true);
 
     await loadMembers();
     setLoading(false);
@@ -82,20 +82,48 @@ export default function MembersPage() {
     setMembers(enriched.filter((m) => m.status === "member"));
   };
 
-  const updateStatus = async (membershipId: string, status: "member" | "rejected") => {
-    setActionLoading(membershipId);
+  const updateStatus = async (row: MemberRow, status: "member" | "rejected") => {
+    if (!currentUserId) return;
+    setActionLoading(row.id);
+
     await supabase
       .from("church_memberships")
-      .update({ status, ...(status === "member" ? { approved_at: new Date().toISOString() } : {}) })
-      .eq("id", membershipId);
+      .update({
+        status,
+        ...(status === "member" ? { approved_at: new Date().toISOString() } : {}),
+      })
+      .eq("id", row.id);
+
+    // Notify the user of the outcome
+    await supabase.from("notifications").insert([{
+      recipient_user_id: row.user_id,
+      actor_user_id: currentUserId,
+      type: status === "member" ? "membership_approved" : "membership_rejected",
+      church_id: churchId,
+    }]);
+
     setActionLoading(null);
     await loadMembers();
   };
 
-  const revokeMembership = async (membershipId: string) => {
-    if (!confirm("Remove this member?")) return;
-    setActionLoading(membershipId);
-    await supabase.from("church_memberships").update({ status: "rejected" }).eq("id", membershipId);
+  const revokeMembership = async (row: MemberRow) => {
+    if (!confirm(t("common_confirm"))) return;
+    if (!currentUserId) return;
+    setActionLoading(row.id);
+
+    await supabase
+      .from("church_memberships")
+      .update({ status: "rejected" })
+      .eq("id", row.id);
+
+    // Notify the user that their membership was revoked
+    await supabase.from("notifications").insert([{
+      recipient_user_id: row.user_id,
+      actor_user_id: currentUserId,
+      type: "membership_rejected",
+      church_id: churchId,
+    }]);
+
     setActionLoading(null);
     await loadMembers();
   };
@@ -118,32 +146,35 @@ export default function MembersPage() {
         <button
           onClick={() => router.back()}
           className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+          aria-label={t("common_back")}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
         <div>
-          <h1 className="font-bold text-gray-900">Church Members</h1>
-          <p className="text-xs text-gray-500">{members.length} members · {pending.length} pending</p>
+          <h1 className="font-bold text-gray-900">{t("church_members_title")}</h1>
+          <p className="text-xs text-gray-500">
+            {t("church_members_count", members.length)} · {pending.length} {t("church_members_pending").toLowerCase()}
+          </p>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-gray-100 bg-white">
-        {(["pending", "members"] as const).map((t) => (
+        {(["pending", "members"] as const).map((tab_key) => (
           <button
-            key={t}
+            key={tab_key}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => setTab(tab_key)}
             className={`relative flex-1 py-3 text-sm font-semibold capitalize transition-colors ${
-              tab === t
+              tab === tab_key
                 ? "border-b-2 border-blue-500 text-blue-600"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t}
-            {t === "pending" && pending.length > 0 && (
+            {tab_key === "pending" ? t("church_members_pending") : t("church_members_title")}
+            {tab_key === "pending" && pending.length > 0 && (
               <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
                 {pending.length}
               </span>
@@ -158,8 +189,8 @@ export default function MembersPage() {
             {pending.length === 0 ? (
               <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
                 <p className="text-2xl mb-2">🎉</p>
-                <p className="font-semibold text-gray-800">No pending requests</p>
-                <p className="mt-1 text-sm text-gray-400">All requests have been processed.</p>
+                <p className="font-semibold text-gray-800">{t("church_no_pending")}</p>
+                <p className="mt-1 text-sm text-gray-400">{t("church_no_pending_desc")}</p>
               </div>
             ) : (
               pending.map((m) => (
@@ -175,31 +206,31 @@ export default function MembersPage() {
                     <div className="flex-1">
                       <p className="font-semibold text-gray-900">{m.full_name || "User"}</p>
                       <p className="text-xs text-gray-400">
-                        Requested {new Date(m.requested_at).toLocaleDateString()}
+                        {t("church_requested", new Date(m.requested_at).toLocaleDateString())}
                       </p>
                     </div>
                     <button
                       onClick={() => router.push(`/user/${m.user_id}`)}
                       className="text-xs text-blue-500 hover:underline"
                     >
-                      View
+                      {t("common_view")}
                     </button>
                   </div>
 
                   <div className="mt-3 flex gap-2">
                     <button
-                      onClick={() => updateStatus(m.id, "member")}
+                      onClick={() => updateStatus(m, "member")}
                       disabled={actionLoading === m.id}
                       className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white disabled:bg-blue-300"
                     >
-                      {actionLoading === m.id ? "..." : "Accept"}
+                      {actionLoading === m.id ? "…" : t("church_accept")}
                     </button>
                     <button
-                      onClick={() => updateStatus(m.id, "rejected")}
+                      onClick={() => updateStatus(m, "rejected")}
                       disabled={actionLoading === m.id}
                       className="flex-1 rounded-xl bg-gray-100 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-50"
                     >
-                      Decline
+                      {t("church_decline")}
                     </button>
                   </div>
                 </div>
@@ -213,8 +244,8 @@ export default function MembersPage() {
             {members.length === 0 ? (
               <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
                 <p className="text-2xl mb-2">👥</p>
-                <p className="font-semibold text-gray-800">No members yet</p>
-                <p className="mt-1 text-sm text-gray-400">Accept membership requests to grow your community.</p>
+                <p className="font-semibold text-gray-800">{t("church_no_members")}</p>
+                <p className="mt-1 text-sm text-gray-400">{t("church_no_members_desc")}</p>
               </div>
             ) : (
               members.map((m) => (
@@ -231,7 +262,9 @@ export default function MembersPage() {
                     <div className="flex items-center gap-1.5">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       <p className="text-xs text-gray-400">
-                        Member since {m.approved_at ? new Date(m.approved_at).toLocaleDateString() : "—"}
+                        {m.approved_at
+                          ? t("church_member_since", new Date(m.approved_at).toLocaleDateString())
+                          : "—"}
                       </p>
                     </div>
                   </div>
@@ -240,14 +273,14 @@ export default function MembersPage() {
                       onClick={() => router.push(`/user/${m.user_id}`)}
                       className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
                     >
-                      View
+                      {t("common_view")}
                     </button>
                     <button
-                      onClick={() => revokeMembership(m.id)}
+                      onClick={() => revokeMembership(m)}
                       disabled={actionLoading === m.id}
                       className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 disabled:opacity-50"
                     >
-                      Remove
+                      {t("church_remove")}
                     </button>
                   </div>
                 </div>

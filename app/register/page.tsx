@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { useLanguage } from "../../lib/useLanguage";
+import type { Lang } from "../../lib/i18n";
 import Logo from "../components/ui/Logo";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { lang, setLang, t } = useLanguage();
   const [accountType, setAccountType] = useState<"personal" | "church">("personal");
 
   const [fullName, setFullName] = useState("");
@@ -268,6 +271,21 @@ export default function RegisterPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-10">
+      {/* Language picker */}
+      <div className="absolute right-4 top-4 flex gap-1">
+        {(["fr", "en"] as Lang[]).map((l) => (
+          <button
+            key={l}
+            onClick={() => setLang(l)}
+            className={`rounded px-2 py-1 text-xs font-semibold uppercase ${
+              lang === l ? "bg-amber-100 text-amber-700" : "text-gray-400 hover:text-gray-700"
+            }`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
       {/* Logo */}
       <div className="mb-6 flex flex-col items-center">
         <Logo size="lg" />
@@ -283,11 +301,11 @@ export default function RegisterPage() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
           </svg>
-          Back
+          {t("common_back")}
         </button>
 
-        <h2 className="mb-1 text-xl font-bold text-gray-900">Create Account</h2>
-        <p className="mb-5 text-sm text-gray-500">Choose your account type</p>
+        <h2 className="mb-1 text-xl font-bold text-gray-900">{t("register_title")}</h2>
+        <p className="mb-5 text-sm text-gray-500">{lang === "fr" ? "Choisissez votre type de compte" : "Choose your account type"}</p>
 
         {/* Account type toggle */}
         <div className="mb-6 flex rounded-xl border border-gray-200 bg-gray-50 p-1">
@@ -418,7 +436,7 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-3 font-semibold text-white shadow-sm transition hover:from-amber-500 hover:to-amber-600 disabled:opacity-60"
           >
-            {loading ? "Creating Account..." : "Create Account"}
+            {loading ? "…" : t("register_submit")}
           </button>
 
           {message && (
@@ -434,9 +452,9 @@ export default function RegisterPage() {
       </div>
 
       <p className="mt-6 text-sm text-gray-500">
-        Already have an account?{" "}
+        {t("register_has_account")}{" "}
         <a href="/login" className="font-semibold text-amber-500 hover:text-amber-600">
-          Sign in
+          {t("register_login_link")}
         </a>
       </p>
     </main>

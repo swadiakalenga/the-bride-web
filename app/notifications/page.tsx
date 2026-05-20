@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { useLanguage } from "../../lib/useLanguage";
 import Card from "../components/ui/Card";
 import EmptyState from "../components/ui/EmptyState";
 import Spinner from "../components/ui/Spinner";
@@ -12,6 +13,7 @@ import type { NotificationItem } from "../../lib/types";
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uiMessage, setUiMessage] = useState("");
@@ -33,17 +35,17 @@ export default function NotificationsPage() {
 
     const { data, error } = await supabase
       .from("notifications")
-      .select("id, type, created_at, is_read, post_id, comment_id, conversation_id, actor_user_id")
+      .select("id, type, created_at, is_read, post_id, comment_id, conversation_id, church_id, actor_user_id")
       .eq("recipient_user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
-      setUiMessage(`Load notifications failed: ${error.message}`);
+      setUiMessage(`${t("common_error")} (${error.message})`);
       setLoading(false);
       return;
     }
 
-    const actorIds = [...new Set((data || []).map((n) => n.actor_user_id))];
+    const actorIds = [...new Set((data || []).map((n) => n.actor_user_id).filter(Boolean))];
 
     const actorMap: Record<
       string,
@@ -51,16 +53,10 @@ export default function NotificationsPage() {
     > = {};
 
     if (actorIds.length > 0) {
-      const { data: actors, error: actorsError } = await supabase
+      const { data: actors } = await supabase
         .from("profiles")
         .select("id, full_name, avatar_url")
         .in("id", actorIds);
-
-      if (actorsError) {
-        setUiMessage(`Load actors failed: ${actorsError.message}`);
-        setLoading(false);
-        return;
-      }
 
       (actors || []).forEach((actor) => {
         actorMap[actor.id] = actor;
@@ -88,7 +84,6 @@ export default function NotificationsPage() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-
       const userId = session?.user?.id;
       if (!userId || cancelled) return;
 
@@ -105,28 +100,21 @@ export default function NotificationsPage() {
             table: "notifications",
             filter: `recipient_user_id=eq.${userId}`,
           },
-          () => {
-            loadNotifications();
-          }
+          () => { loadNotifications(); }
         )
         .subscribe();
     };
 
     setupRealtime();
-
     return () => {
       cancelled = true;
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 
   const markAllAsRead = async () => {
     const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
-    if (unreadIds.length === 0) return;
-
-    if (!currentUserId) return;
+    if (unreadIds.length === 0 || !currentUserId) return;
 
     const { error } = await supabase
       .from("notifications")
@@ -134,103 +122,74 @@ export default function NotificationsPage() {
       .eq("recipient_user_id", currentUserId)
       .in("id", unreadIds);
 
-    if (error) {
-      setUiMessage(`Mark all read failed: ${error.message}`);
-      return;
-    }
+    if (error) { setUiMessage(t("common_error")); return; }
 
-    setNotifications((prev) =>
-      prev.map((notification) => ({
-        ...notification,
-        is_read: true,
-      }))
-    );
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
   };
 
   const markOneAsRead = async (id: string) => {
     if (!currentUserId) return false;
-
     const { error } = await supabase
       .from("notifications")
       .update({ is_read: true })
       .eq("recipient_user_id", currentUserId)
       .eq("id", id);
-
     if (error) return false;
-
     setNotifications((prev) =>
-      prev.map((notification) =>
-        notification.id === id
-          ? { ...notification, is_read: true }
-          : notification
-      )
+      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
-
     return true;
   };
 
-  const getText = (notification: NotificationItem) => {
-    const name = notification.actor?.full_name || "Someone";
-
-    switch (notification.type) {
-      case "follow":
-        return `${name} started following you`;
-      case "like":
-        return `${name} liked your post`;
-      case "comment":
-        return `${name} commented on your post`;
-      case "reply":
-        return `${name} replied to your comment`;
-      case "membership_request":
-        return `${name} requested to join your church`;
-      case "message":
-        return `${name} sent you a message`;
-      case "message_request":
-        return `${name} sent you a message request`;
-      case "tag":
-        return `${name} tagged you in a post`;
-      case "prayer":
-        return `${name} prayed for your request`;
-      case "event":
-        return `New event from your church`;
-      default:
-        return "New notification";
+  const getText = (n: NotificationItem): string => {
+    const name = n.actor?.full_name || "Someone";
+    switch (n.type) {
+      case "follow":            return t("notif_follow", name);
+      case "like":              return t("notif_like", name);
+      case "comment":           return t("notif_comment", name);
+      case "reply":             return t("notif_reply", name);
+      case "membership_request":  return t("notif_membership_request", name);
+      case "membership_approved": return t("notif_membership_approved", name);
+      case "membership_rejected": return t("notif_membership_rejected", name);
+      case "church_verified":     return t("notif_church_verified");
+      case "church_rejected":     return t("notif_church_rejected");
+      case "message":             return t("notif_message", name);
+      case "message_request":     return t("notif_message_request", name);
+      case "tag":                 return t("notif_tag", name);
+      case "prayer":              return t("notif_prayer", name);
+      case "event":               return t("notif_event");
+      default:                    return t("notif_default");
     }
   };
 
-  const getLink = (notification: NotificationItem) => {
-    if (notification.type === "message" || notification.type === "message_request") {
-      if (notification.conversation_id) {
-        return `/messages/${notification.conversation_id}`;
-      }
-      return "/messages";
+  const getLink = (n: NotificationItem): string => {
+    if (n.type === "message" || n.type === "message_request") {
+      return n.conversation_id ? `/messages/${n.conversation_id}` : "/messages";
     }
 
-    if (notification.type === "membership_request") {
-      return "/profile";
+    // Membership request → admin reviews at /church/[id]/members
+    if (n.type === "membership_request") {
+      return n.church_id ? `/church/${n.church_id}/members` : "/profile";
     }
 
-    if (notification.type === "follow" && notification.actor?.id) {
-      return `/user/${notification.actor.id}`;
+    // Membership outcome → user sees their status on the church page
+    if (n.type === "membership_approved" || n.type === "membership_rejected") {
+      return n.church_id ? `/church/${n.church_id}` : "/feed";
     }
 
-    if (notification.type === "tag" && notification.post_id) {
-      return `/post/${notification.post_id}`;
+    // Church verification outcome → church admin sees their church page
+    if (n.type === "church_verified" || n.type === "church_rejected") {
+      return n.church_id ? `/church/${n.church_id}` : "/profile";
     }
 
-    if (notification.type === "prayer") {
-      return "/feed";
-    }
+    if (n.type === "follow" && n.actor?.id) return `/user/${n.actor.id}`;
+    if (n.type === "tag" && n.post_id) return `/post/${n.post_id}`;
+    if (n.type === "prayer" || n.type === "event") return "/feed";
 
-    if (notification.type === "event") {
-      return "/feed";
-    }
-
-    if (notification.post_id) {
-      if (notification.comment_id) {
-        return `/post/${notification.post_id}?commentId=${notification.comment_id}`;
-      }
-      return `/post/${notification.post_id}`;
+    if (n.post_id) {
+      return n.comment_id
+        ? `/post/${n.post_id}?commentId=${n.comment_id}`
+        : `/post/${n.post_id}`;
     }
 
     return "/feed";
@@ -241,9 +200,7 @@ export default function NotificationsPage() {
     notification: NotificationItem
   ) => {
     e.preventDefault();
-
     await markOneAsRead(notification.id);
-
     router.push(getLink(notification));
   };
 
@@ -272,37 +229,33 @@ export default function NotificationsPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
       <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.back()}
               className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
-              aria-label="Go back"
+              aria-label={t("common_back")}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Notifications</h1>
+              <h1 className="text-lg font-bold text-gray-900">{t("notif_title")}</h1>
               <p className="text-xs text-gray-400">
-                {unreadCount > 0
-                  ? `${unreadCount} unread`
-                  : "All caught up"}
+                {unreadCount > 0 ? t("notif_unread", unreadCount) : t("notif_all_read")}
               </p>
             </div>
           </div>
 
           <Button onClick={markAllAsRead} disabled={unreadCount === 0} size="sm">
-            Mark all read
+            {t("notif_mark_all")}
           </Button>
         </div>
       </header>
 
       <div className="mx-auto w-full max-w-lg px-4 pt-4">
-
         {uiMessage && (
           <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
             {uiMessage}
@@ -313,8 +266,8 @@ export default function NotificationsPage() {
           <Spinner />
         ) : notifications.length === 0 ? (
           <EmptyState
-            title="No notifications yet"
-            description="When someone follows, likes, comments, or replies, it will appear here."
+            title={t("notif_empty_title")}
+            description={t("notif_empty_desc")}
           />
         ) : (
           <div className="space-y-3">
@@ -337,7 +290,6 @@ export default function NotificationsPage() {
                       <p className="text-sm font-medium text-gray-800">
                         {getText(notification)}
                       </p>
-
                       <p className="mt-1 text-xs text-gray-500">
                         {new Date(notification.created_at).toLocaleString()}
                       </p>

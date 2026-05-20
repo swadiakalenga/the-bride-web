@@ -200,59 +200,23 @@ export default function UserProfilePage() {
     const canDirectMessage = mutualFollow || targetIsChurch;
 
     if (canDirectMessage) {
-      const { data: convData, error: convError } = await supabase
-        .from("conversations")
-        .insert([{}])
-        .select("id")
-        .single();
+      // Use SECURITY DEFINER RPC — avoids RLS issues on conversations/participants
+      const { data: convId, error: convError } = await supabase
+        .rpc("create_direct_conversation", {
+          p_other_user_id: profile.id,
+          p_message: requestMessage.trim(),
+        });
 
-      if (convError || !convData) {
+      if (convError || !convId) {
         setMessagingLoading(false);
         setUiMessage(`Could not start conversation: ${convError?.message || "unknown error"}`);
         return;
       }
 
-      // Insert participants sequentially — batch insert violates RLS (same-statement visibility).
-      const { error: p1Error } = await supabase
-        .from("conversation_participants")
-        .insert({ conversation_id: convData.id, user_id: currentUserId });
-
-      if (p1Error) {
-        setMessagingLoading(false);
-        setUiMessage(`Could not add participants: ${p1Error.message}`);
-        return;
-      }
-
-      const { error: p2Error } = await supabase
-        .from("conversation_participants")
-        .insert({ conversation_id: convData.id, user_id: profile.id });
-
-      if (p2Error) {
-        setMessagingLoading(false);
-        setUiMessage(`Could not add participants: ${p2Error.message}`);
-        return;
-      }
-
-      const { error: msgError } = await supabase.from("messages").insert([{
-        conversation_id: convData.id,
-        sender_id: currentUserId,
-        content: requestMessage.trim(),
-      }]);
-
-      // Notify recipient
-      if (!msgError) {
-        await supabase.from("notifications").insert([{
-          recipient_user_id: profile.id,
-          actor_user_id: currentUserId,
-          type: "message",
-          conversation_id: convData.id,
-        }]);
-      }
-
       setMessagingLoading(false);
       setShowRequestModal(false);
       setRequestMessage("");
-      router.push(`/messages/${convData.id}`);
+      router.push(`/messages/${convId}`);
     } else {
       // Plain insert — avoids upsert's requirement for a UNIQUE constraint on (sender_id,recipient_id).
       const { error } = await supabase.from("message_requests").insert({
@@ -294,14 +258,15 @@ export default function UserProfilePage() {
     }], { onConflict: "church_id,user_id" });
 
     if (!error) {
-      // Notify the church admin (profile.id is the church admin)
+      // Notify the church admin; include church_id so the notification links to /church/[id]/members
       await supabase.from("notifications").insert([{
         recipient_user_id: profile.id,
         actor_user_id: currentUserId,
         type: "membership_request",
+        church_id: profile.church_id,
       }]);
       setMembershipStatus("pending");
-      setUiMessage("Membership request sent.");
+      setUiMessage("Demande d'adhésion envoyée.");
     } else {
       setUiMessage(error.message);
     }

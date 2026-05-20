@@ -46,6 +46,10 @@ export type NotificationType =
   | "comment"
   | "reply"
   | "membership_request"
+  | "membership_approved"
+  | "membership_rejected"
+  | "church_verified"
+  | "church_rejected"
   | "message"
   | "message_request"
   | "tag"
@@ -60,6 +64,7 @@ export type NotificationItem = {
   post_id: string | null;
   comment_id: string | null;
   conversation_id: string | null;
+  church_id: string | null;
   actor_user_id: string;
   actor?: {
     id: string;

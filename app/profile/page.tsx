@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { useLanguage } from "../../lib/useLanguage";
 import BottomNav from "../components/ui/BottomNav";
 import Card from "../components/ui/Card";
 
@@ -37,6 +38,7 @@ type ChurchOption = {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [myChurch, setMyChurch] = useState<Church | null>(null);
@@ -254,7 +256,7 @@ export default function ProfilePage() {
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-          <h1 className="text-lg font-bold text-gray-900">Profile</h1>
+          <h1 className="text-lg font-bold text-gray-900">{t("nav_profile")}</h1>
         </div>
       </header>
 
@@ -389,11 +391,11 @@ export default function ProfilePage() {
                   <div className="mt-6 flex items-center justify-center gap-8 rounded-xl bg-gray-50 p-4">
                     <div className="text-center">
                       <p className="text-2xl font-bold">{followersCount}</p>
-                      <p className="text-sm text-gray-500">Followers</p>
+                      <p className="text-sm text-gray-500">{t("profile_followers")}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold">{followingCount}</p>
-                      <p className="text-sm text-gray-500">Following</p>
+                      <p className="text-sm text-gray-500">{t("profile_following")}</p>
                     </div>
                   </div>
 
@@ -401,7 +403,7 @@ export default function ProfilePage() {
                     onClick={() => setIsEditing(true)}
                     className="mt-4 w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    Edit Profile
+                    {t("profile_edit")}
                   </button>
 
                   {/* Church profile link */}
@@ -484,7 +486,7 @@ export default function ProfilePage() {
               {/* ── EDIT MODE ── */}
               {isEditing && (
                 <>
-                  <h1 className="text-center text-2xl font-bold text-gray-900">Edit Profile</h1>
+                  <h1 className="text-center text-2xl font-bold text-gray-900">{t("profile_edit")}</h1>
 
                   <div className="mt-6 flex flex-col items-center">
                     <div className="relative">
@@ -622,14 +624,14 @@ export default function ProfilePage() {
                       onClick={cancelEdit}
                       className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
-                      Cancel
+                      {t("profile_cancel")}
                     </button>
                     <button
                       onClick={saveProfile}
                       disabled={saving}
                       className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-medium text-white disabled:bg-blue-400"
                     >
-                      {saving ? "Saving..." : "Save Changes"}
+                      {saving ? "…" : t("profile_save")}
                     </button>
                   </div>
                 </>
