@@ -24,30 +24,126 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [checking, setChecking] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // ── DEBUG STATE ──────────────────────────────────────────────────
+  const [debugRole, setDebugRole] = useState<string>("(loading)");
+  const [debugUserId, setDebugUserId] = useState<string>("(loading)");
+  const [debugProfileLoaded, setDebugProfileLoaded] = useState(false);
+  const [debugError, setDebugError] = useState<string>("");
+  const [debugAuthError, setDebugAuthError] = useState<string>("");
+  // ────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     (async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) { router.replace("/login"); return; }
+      // Step 1: get authenticated user
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr) setDebugAuthError(authErr.message);
 
-      const { data: profile } = await supabase
+      if (!authData.user) {
+        setDebugUserId("null — no session");
+        setDebugRole("(no user)");
+        router.replace("/login");
+        return;
+      }
+
+      setDebugUserId(authData.user.id);
+
+      // Step 2: fetch profile role
+      const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", authData.user.id)
         .maybeSingle();
 
-      if (profile?.role !== "platform_admin") {
-        router.replace("/feed");
+      setDebugProfileLoaded(true);
+
+      if (profileErr) {
+        setDebugError(profileErr.message);
+        setDebugRole("(query error)");
+        // Don't redirect — show debug panel so we can read the error
+        setChecking(false);
         return;
       }
+
+      const role = profile?.role ?? "(null — row not found)";
+      setDebugRole(role);
+
+      if (role !== "platform_admin") {
+        // Don't redirect immediately — keep checking=true but show debug panel
+        setChecking(false);
+        return;
+      }
+
       setChecking(false);
     })();
-  }, [router]);
+  }, []); // stable — no deps needed
+
+  // ── DEBUG PANEL (always visible while checking or if role mismatch) ──
+  const debugPanel = (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        background: "#1e293b",
+        color: "#e2e8f0",
+        fontFamily: "monospace",
+        fontSize: 12,
+        padding: "8px 16px",
+        borderTop: "2px solid #f59e0b",
+        display: "flex",
+        flexWrap: "wrap" as const,
+        gap: "16px",
+      }}
+    >
+      <span><strong style={{ color: "#f59e0b" }}>role=</strong>{debugRole}</span>
+      <span><strong style={{ color: "#f59e0b" }}>userId=</strong>{debugUserId.slice(0, 8)}…</span>
+      <span><strong style={{ color: "#f59e0b" }}>loading=</strong>{String(checking)}</span>
+      <span><strong style={{ color: "#f59e0b" }}>pathname=</strong>{pathname}</span>
+      <span><strong style={{ color: "#f59e0b" }}>profileLoaded=</strong>{String(debugProfileLoaded)}</span>
+      {debugAuthError && <span style={{ color: "#f87171" }}><strong>authErr=</strong>{debugAuthError}</span>}
+      {debugError && <span style={{ color: "#f87171" }}><strong>profileErr=</strong>{debugError}</span>}
+      {debugRole !== "platform_admin" && debugProfileLoaded && !debugError && (
+        <span style={{ color: "#fbbf24" }}>
+          ⚠ role is &quot;{debugRole}&quot; — expected &quot;platform_admin&quot;. Run: UPDATE public.profiles SET role = &apos;platform_admin&apos; WHERE id = &apos;{debugUserId}&apos;;
+        </span>
+      )}
+    </div>
+  );
 
   if (checking) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-400 border-t-transparent" />
-      </div>
+      <>
+        <div className="flex h-screen items-center justify-center bg-gray-50">
+          <div className="space-y-4 text-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-400 border-t-transparent mx-auto" />
+            <p className="text-sm text-gray-500">Checking admin access…</p>
+          </div>
+        </div>
+        {debugPanel}
+      </>
+    );
+  }
+
+  // Role loaded but not platform_admin — show access denied with debug
+  if (debugRole !== "platform_admin") {
+    return (
+      <>
+        <div className="flex h-screen flex-col items-center justify-center gap-4 bg-gray-50">
+          <p className="text-lg font-semibold text-gray-700">Access denied</p>
+          <p className="text-sm text-gray-500">
+            Your role is <code className="rounded bg-gray-100 px-1">{debugRole}</code>. Only <code className="rounded bg-gray-100 px-1">platform_admin</code> can view this page.
+          </p>
+          <button
+            onClick={() => router.replace("/feed")}
+            className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+          >
+            Go to feed
+          </button>
+        </div>
+        {debugPanel}
+      </>
     );
   }
 
@@ -139,6 +235,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {children}
         </main>
       </div>
+      {debugPanel}
     </div>
   );
 }
