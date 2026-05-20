@@ -120,14 +120,37 @@ alter table public.conversation_participants enable row level security;
 alter table public.messages               enable row level security;
 alter table public.live_streams           enable row level security;
 alter table public.post_views             enable row level security;
-alter table public.church_events          enable row level security;
-alter table public.event_rsvps            enable row level security;
-alter table public.prayer_requests        enable row level security;
-alter table public.prayer_supports        enable row level security;
-alter table public.devotionals            enable row level security;
 alter table public.payment_settings       enable row level security;
 alter table public.donations              enable row level security;
 alter table public.church_verifications   enable row level security;
+
+-- Optional tables — guarded because these may not exist on all deployments.
+-- Using pg_tables check + execute to avoid "relation does not exist" errors.
+do $$ begin
+  if exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'church_events') then
+    execute 'alter table public.church_events enable row level security';
+  end if;
+end $$;
+do $$ begin
+  if exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'event_rsvps') then
+    execute 'alter table public.event_rsvps enable row level security';
+  end if;
+end $$;
+do $$ begin
+  if exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'prayer_requests') then
+    execute 'alter table public.prayer_requests enable row level security';
+  end if;
+end $$;
+do $$ begin
+  if exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'prayer_supports') then
+    execute 'alter table public.prayer_supports enable row level security';
+  end if;
+end $$;
+do $$ begin
+  if exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'devotionals') then
+    execute 'alter table public.devotionals enable row level security';
+  end if;
+end $$;
 
 -- Conditionally enable RLS on tables that may have been created later.
 do $$ begin

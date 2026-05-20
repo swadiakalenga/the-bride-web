@@ -487,17 +487,33 @@ end $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- F-4.  Prayer requests: max 1 000 characters
+-- GUARDED: table may not exist on all deployments.
+-- Does NOT use ::regclass (which throws if the table is absent even inside IF).
 -- ─────────────────────────────────────────────────────────────────────────────
 do $$
 begin
+  -- Step 1: bail out entirely if the table does not exist.
   if not exists (
-    select 1 from pg_constraint
-     where conname = 'prayer_content_maxlen'
-       and conrelid = 'public.prayer_requests'::regclass
+    select 1 from information_schema.tables
+     where table_schema = 'public' and table_name = 'prayer_requests'
   ) then
-    alter table public.prayer_requests
-      add constraint prayer_content_maxlen
-      check (length(content) <= 1000);
+    return;
+  end if;
+
+  -- Step 2: add constraint only if not already present.
+  -- Use pg_class join instead of ::regclass so this block is re-run-safe.
+  if not exists (
+    select 1
+      from pg_constraint c
+      join pg_class      t on t.oid = c.conrelid
+      join pg_namespace  n on n.oid = t.relnamespace
+     where c.conname  = 'prayer_content_maxlen'
+       and t.relname  = 'prayer_requests'
+       and n.nspname  = 'public'
+  ) then
+    execute 'alter table public.prayer_requests
+               add constraint prayer_content_maxlen
+               check (length(content) <= 1000)';
   end if;
 end $$;
 

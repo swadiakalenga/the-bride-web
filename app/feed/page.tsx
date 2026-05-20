@@ -15,6 +15,8 @@ import LeftSidebar from "../components/feed/LeftSidebar";
 import RightSidebar from "../components/feed/RightSidebar";
 import MobileMenuDrawer from "../components/ui/MobileMenuDrawer";
 import EmojiPicker from "../components/ui/EmojiPicker";
+import ExpandableText from "../components/ui/ExpandableText";
+import { useLanguage } from "../../lib/useLanguage";
 import type { Post, Comment, Profile } from "../../lib/types";
 import { checkContentGuidelines } from "../../lib/types";
 
@@ -30,6 +32,7 @@ type UserLikeMap = Record<string, boolean>;
 
 export default function Feed() {
   const router = useRouter();
+  const { lang } = useLanguage();
   const [feedType, setFeedType] = useState<"people" | "church">("people");
 
   const [posts, setPosts] = useState<Post[]>([]);
@@ -1736,7 +1739,13 @@ export default function Feed() {
                         </div>
                       ) : (
                         <>
-                          {post.content && <p className="mt-1 whitespace-pre-wrap">{post.content}</p>}
+                          {post.content && (
+                            <ExpandableText
+                              text={post.content}
+                              lang={lang}
+                              className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-800"
+                            />
+                          )}
                           {post.tagged_user_ids && post.tagged_user_ids.length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1">
                               {post.tagged_user_ids.map((uid) => {

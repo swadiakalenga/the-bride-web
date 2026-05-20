@@ -1,5 +1,6 @@
 import type { Post } from "../../../lib/types";
 import MediaGrid from "./MediaGrid";
+import ExpandableText from "../ui/ExpandableText";
 
 type PostCardProps = {
   post: Post;
@@ -28,7 +29,9 @@ export default function PostCard({
         <div className="flex-1">
           <p className="font-semibold">{post.author_name || "Unknown"}</p>
 
-          {post.content && <p className="mt-1">{post.content}</p>}
+          {post.content && (
+            <ExpandableText text={post.content} className="mt-1 whitespace-pre-wrap text-sm" />
+          )}
 
           {post.media_type === "photo" && mediaUrls.length > 0 && (
             <MediaGrid urls={mediaUrls} />
