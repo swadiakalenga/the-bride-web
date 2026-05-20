@@ -106,6 +106,55 @@ Full lint currently reports React Compiler migration warnings for older client-s
 - Confirm media and avatars buckets exist.
 - Test signup, login, People feed post, Church feed post, like, comment, reply, follow, notifications, and post detail links after deployment.
 
+## Production Services
+
+TheBride integrates the following external services in production. See `docs/` for full setup guides.
+
+| Service | Purpose | Setup guide |
+|---------|---------|-------------|
+| Vercel | Web hosting and CI/CD | `docs/PRODUCTION_ACCOUNTS_SETUP.md` |
+| Supabase | Database, Auth, Storage, Realtime | `docs/PRODUCTION_ACCOUNTS_SETUP.md` |
+| Cloudflare | DNS, CDN, WAF, DDoS protection | `docs/PRODUCTION_ACCOUNTS_SETUP.md` |
+| AWS S3 + CloudFront | Transcoded video/audio CDN delivery | `docs/LIVE_MEDIA_SERVICE_PLAN.md` |
+| AWS MediaConvert | Video transcoding to HLS | `docs/LIVE_MEDIA_SERVICE_PLAN.md` |
+| AWS SES | Transactional email (receipts, auth) | `docs/PRODUCTION_ACCOUNTS_SETUP.md` |
+| Mux | Live streaming (RTMP ingest → HLS) | `docs/LIVE_MEDIA_SERVICE_PLAN.md` |
+| Stripe | Card payment processing for donations | `docs/PAYMENTS_INTEGRATION_PLAN.md` |
+| PayPal Business | PayPal donation processing | `docs/PAYMENTS_INTEGRATION_PLAN.md` |
+| Apple Developer | iOS App Store distribution + APNs | `docs/APP_STORE_RELEASE_PLAN.md` |
+| Google Play Console | Android distribution + FCM | `docs/APP_STORE_RELEASE_PLAN.md` |
+| Sentry | Error monitoring and alerting | `docs/PRODUCTION_ACCOUNTS_SETUP.md` |
+| Google Analytics 4 | Usage analytics | `docs/PRODUCTION_ACCOUNTS_SETUP.md` |
+
+### Environment variables
+
+All environment variables are documented in `docs/PRODUCTION_ACCOUNTS_SETUP.md` under **Master Environment Variables Reference**.
+
+For local development, copy the template and fill in test/sandbox credentials:
+
+```bash
+cp .env.example .env.local   # if .env.example exists
+# or create .env.local manually — see docs/PRODUCTION_ACCOUNTS_SETUP.md
+```
+
+Required variables for basic local development (web only):
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+### Documentation index
+
+```
+docs/
+├── PRODUCTION_ACCOUNTS_SETUP.md   — all service accounts, env vars, security rules
+├── PAYMENTS_INTEGRATION_PLAN.md   — Stripe + PayPal architecture and testing plan
+├── LIVE_MEDIA_SERVICE_PLAN.md     — AWS MediaConvert + Mux live streaming plan
+├── MESSAGING_CALLS_PLAN.md        — push notifications + future voice/video calls
+└── APP_STORE_RELEASE_PLAN.md      — Capacitor, iOS, and Android release process
+```
+
 ## Production Notes
 
 The current frontend now filters notification reads/counts by recipient_user_id, and feed edit/delete mutations include user ownership filters. Supabase RLS must still enforce these rules server-side before launch.
