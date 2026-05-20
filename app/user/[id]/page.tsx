@@ -212,10 +212,26 @@ export default function UserProfilePage() {
         return;
       }
 
-      await supabase.from("conversation_participants").insert([
-        { conversation_id: convData.id, user_id: currentUserId },
-        { conversation_id: convData.id, user_id: profile.id },
-      ]);
+      // Insert participants sequentially — batch insert violates RLS (same-statement visibility).
+      const { error: p1Error } = await supabase
+        .from("conversation_participants")
+        .insert({ conversation_id: convData.id, user_id: currentUserId });
+
+      if (p1Error) {
+        setMessagingLoading(false);
+        setUiMessage(`Could not add participants: ${p1Error.message}`);
+        return;
+      }
+
+      const { error: p2Error } = await supabase
+        .from("conversation_participants")
+        .insert({ conversation_id: convData.id, user_id: profile.id });
+
+      if (p2Error) {
+        setMessagingLoading(false);
+        setUiMessage(`Could not add participants: ${p2Error.message}`);
+        return;
+      }
 
       const { error: msgError } = await supabase.from("messages").insert([{
         conversation_id: convData.id,
@@ -238,15 +254,13 @@ export default function UserProfilePage() {
       setRequestMessage("");
       router.push(`/messages/${convData.id}`);
     } else {
-      const { error } = await supabase.from("message_requests").upsert(
-        [{
-          sender_id: currentUserId,
-          recipient_id: profile.id,
-          initial_message: requestMessage.trim(),
-          status: "pending",
-        }],
-        { onConflict: "sender_id,recipient_id" }
-      );
+      // Plain insert — avoids upsert's requirement for a UNIQUE constraint on (sender_id,recipient_id).
+      const { error } = await supabase.from("message_requests").insert({
+        sender_id: currentUserId,
+        recipient_id: profile.id,
+        initial_message: requestMessage.trim(),
+        status: "pending",
+      });
 
       // Notify recipient of message request
       if (!error) {
