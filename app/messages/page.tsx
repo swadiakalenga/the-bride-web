@@ -46,6 +46,7 @@ export default function MessagesPage() {
   const [requests, setRequests] = useState<MessageRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   // New conversation
   const [showNewConv, setShowNewConv] = useState(false);
@@ -222,30 +223,31 @@ export default function MessagesPage() {
   const acceptRequest = async (req: MessageRequest) => {
     if (!currentUserId) return;
     setActionLoading(req.id);
+    setPageError(null);
 
-    const { data: convData, error } = await supabase
-      .from("conversations")
-      .insert([{}])
-      .select("id")
-      .single();
+    // accept_message_request() is a SECURITY DEFINER function that atomically:
+    //   1. Creates the conversation row
+    //   2. Inserts both participants (recipient first, then sender)
+    //   3. Inserts the initial message with the correct sender_id (bypasses RLS
+    //      so the recipient can insert a message attributed to the sender)
+    //   4. Marks the message_request as accepted
+    //   Returns the new conversation_id.
+    //
+    // Requires supabase-messaging-fix.sql to be applied in Supabase SQL editor.
+    const { data: convId, error } = await supabase
+      .rpc("accept_message_request", { p_request_id: req.id });
 
-    if (error || !convData) { setActionLoading(null); return; }
-
-    await supabase.from("conversation_participants").insert([
-      { conversation_id: convData.id, user_id: currentUserId },
-      { conversation_id: convData.id, user_id: req.sender_id },
-    ]);
-
-    await supabase.from("messages").insert([{
-      conversation_id: convData.id,
-      sender_id: req.sender_id,
-      content: req.initial_message,
-    }]);
-
-    await supabase.from("message_requests").update({ status: "accepted" }).eq("id", req.id);
+    if (error || !convId) {
+      setActionLoading(null);
+      setPageError(
+        `Could not accept request: ${error?.message ?? "no conversation returned"}. ` +
+        "Make sure supabase-messaging-fix.sql has been applied in the Supabase SQL editor."
+      );
+      return;
+    }
 
     setActionLoading(null);
-    router.push(`/messages/${convData.id}`);
+    router.push(`/messages/${convId}`);
   };
 
   const ignoreRequest = async (reqId: string) => {
@@ -294,18 +296,30 @@ export default function MessagesPage() {
     }
 
     // Create new conversation
-    const { data: convData, error } = await supabase
+    const { data: convData, error: convError } = await supabase
       .from("conversations")
       .insert([{}])
       .select("id")
       .single();
 
-    if (error || !convData) return;
+    if (convError || !convData) {
+      setPageError(`Could not start conversation: ${convError?.message || "unknown error"}`);
+      return;
+    }
 
-    await supabase.from("conversation_participants").insert([
-      { conversation_id: convData.id, user_id: currentUserId },
-      { conversation_id: convData.id, user_id: targetUser.id },
-    ]);
+    // Insert participants sequentially — batch insert violates RLS (same-statement visibility).
+    const { error: p1Error } = await supabase
+      .from("conversation_participants")
+      .insert({ conversation_id: convData.id, user_id: currentUserId });
+
+    if (p1Error) {
+      setPageError(`Could not add participants: ${p1Error.message}`);
+      return;
+    }
+
+    await supabase
+      .from("conversation_participants")
+      .insert({ conversation_id: convData.id, user_id: targetUser.id });
 
     setShowNewConv(false);
     router.push(`/messages/${convData.id}`);
@@ -381,6 +395,13 @@ export default function MessagesPage() {
           )}
         </button>
       </div>
+
+      {/* Inline error banner */}
+      {pageError && (
+        <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-600">
+          {pageError}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">

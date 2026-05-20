@@ -69,6 +69,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [uiMessage, setUiMessage] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -82,13 +83,30 @@ export default function ChatPage() {
   const videoInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    loadPage();
+    if (!conversationId) return;
+
+    // Per-invocation mounted flag. Each navigation/Strict-Mode double-invoke
+    // gets its own isolated boolean, so cleanup of an old invocation cannot
+    // accidentally un-cancel an in-flight request from a newer one.
+    let mounted = true;
+
+    setMessages([]);
+    setLoadError(null);
+    setOtherUser(null);
+    setLoading(true);
+
+    console.log("[ChatPage] switching to conversation", conversationId);
+
+    loadPage(() => mounted);
+
     return () => {
+      mounted = false;
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
   }, [conversationId]);
 
   useEffect(() => {
+    console.log("[ChatPage] messages state changed:", messages.length, messages.map((m) => m.id).join(", "));
     bottomRef.current?.scrollIntoView({ behavior: "instant" });
   }, [messages]);
 
@@ -102,27 +120,37 @@ export default function ChatPage() {
     return () => { clearTimeout(timer); document.removeEventListener("click", close); };
   }, [showMediaMenu]);
 
-  async function loadPage() {
+  async function loadPage(isMounted: () => boolean) {
+    const convId = conversationId;
+
     const { data: authData } = await supabase.auth.getUser();
     const me = authData.user?.id;
     if (!me) { router.push("/login"); return; }
+    if (!isMounted()) return;
+
     setCurrentUserId(me);
     meRef.current = me;
 
     const { data: participation } = await supabase
       .from("conversation_participants")
       .select("user_id")
-      .eq("conversation_id", conversationId)
+      .eq("conversation_id", convId)
       .eq("user_id", me)
       .maybeSingle();
+
+    if (!isMounted()) return;
+
+    console.log("[ChatPage] participation check for", convId, "→", participation);
 
     if (!participation) { router.push("/messages"); return; }
 
     const { data: others } = await supabase
       .from("conversation_participants")
       .select("user_id")
-      .eq("conversation_id", conversationId)
+      .eq("conversation_id", convId)
       .neq("user_id", me);
+
+    if (!isMounted()) return;
 
     if (others && others.length > 0) {
       const otherId = others[0].user_id;
@@ -132,31 +160,57 @@ export default function ChatPage() {
         .eq("id", otherId)
         .maybeSingle();
 
-      setOtherUser({
-        id: otherId,
-        full_name: profile?.full_name ?? null,
-        avatar_url: profile?.avatar_url ?? null,
-      });
+      if (isMounted()) {
+        setOtherUser({
+          id: otherId,
+          full_name: profile?.full_name ?? null,
+          avatar_url: profile?.avatar_url ?? null,
+        });
+      }
     }
 
-    await Promise.all([loadMessages(me), loadSidebarConversations(me)]);
-    subscribeToMessages(me);
+    await Promise.all([loadMessages(me, convId, isMounted), loadSidebarConversations(me)]);
+    if (!isMounted()) return;
+
+    subscribeToMessages(me, convId);
     setLoading(false);
   }
 
-  const loadMessages = async (me: string) => {
-    const { data } = await supabase
+  const loadMessages = async (me: string, convId: string, isMounted: () => boolean) => {
+    console.log("[ChatPage] loadMessages querying conversation_id =", convId);
+
+    const { data, error } = await supabase
       .from("messages")
-      .select("id, sender_id, content, created_at, is_read, media_url, media_type")
-      .eq("conversation_id", conversationId)
+      .select("*")
+      .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
 
-    setMessages(data || []);
+    console.log(
+      "[ChatPage] loadMessages result: count =", data?.length,
+      "| error =", error?.message ?? "none",
+      "| convId =", convId,
+    );
 
+    if (!isMounted()) {
+      console.log("[ChatPage] loadMessages: isMounted=false, skipping setMessages (convId:", convId, ")");
+      return;
+    }
+
+    if (error) {
+      setLoadError(`Failed to load messages: ${error.message}`);
+      return;
+    }
+    setLoadError(null);
+    setMessages(data || []);
+    console.log("[ChatPage] setMessages called with", (data || []).length, "rows for convId:", convId);
+
+    // Mark all incoming unread messages as read, and stamp read_at if the
+    // column exists (requires supabase-read-receipts.sql migration).
+    // Errors here are silently dropped — they do not break the chat.
     supabase
       .from("messages")
-      .update({ is_read: true })
-      .eq("conversation_id", conversationId)
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq("conversation_id", convId)
       .eq("is_read", false)
       .neq("sender_id", me)
       .then(() => {});
@@ -245,18 +299,18 @@ export default function ChatPage() {
     setSidebarConversations(rows);
   };
 
-  const subscribeToMessages = (me: string) => {
+  const subscribeToMessages = (me: string, convId: string) => {
     if (channelRef.current) supabase.removeChannel(channelRef.current);
 
     const channel = supabase
-      .channel(`chat-${conversationId}-${Date.now()}`)
+      .channel(`chat-${convId}-${Date.now()}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "messages",
-          filter: `conversation_id=eq.${conversationId}`,
+          filter: `conversation_id=eq.${convId}`,
         },
         (payload) => {
           const newMsg = payload.new as ChatMessage;
@@ -274,7 +328,10 @@ export default function ChatPage() {
           });
 
           if (newMsg.sender_id !== me) {
-            supabase.from("messages").update({ is_read: true }).eq("id", newMsg.id).then(() => {});
+            supabase.from("messages")
+              .update({ is_read: true, read_at: new Date().toISOString() })
+              .eq("id", newMsg.id)
+              .then(() => {});
           }
           void loadSidebarConversations(me);
         }
@@ -285,12 +342,16 @@ export default function ChatPage() {
           event: "UPDATE",
           schema: "public",
           table: "messages",
-          filter: `conversation_id=eq.${conversationId}`,
+          filter: `conversation_id=eq.${convId}`,
         },
         (payload) => {
           const updated = payload.new as ChatMessage;
           setMessages((prev) =>
-            prev.map((m) => (m.id === updated.id ? { ...m, is_read: updated.is_read } : m))
+            prev.map((m) =>
+              m.id === updated.id
+                ? { ...m, is_read: updated.is_read, read_at: updated.read_at }
+                : m
+            )
           );
           void loadSidebarConversations(me);
         }
@@ -306,6 +367,7 @@ export default function ChatPage() {
 
     const text = input.trim();
     setInput("");
+    setUiMessage("");
     setShowEmojiPicker(false);
     inputRef.current?.focus();
 
@@ -329,6 +391,7 @@ export default function ChatPage() {
     if (error) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setInput(text);
+      setUiMessage(`Failed to send message: ${error.message}`);
     } else if (otherUser?.id) {
       supabase.from("notifications").insert([{
         recipient_user_id: otherUser.id,
@@ -388,6 +451,7 @@ export default function ChatPage() {
 
     if (error) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setUiMessage(`Failed to send media: ${error.message}`);
     } else if (otherUser?.id) {
       supabase.from("notifications").insert([{
         recipient_user_id: otherUser.id,
@@ -409,13 +473,27 @@ export default function ChatPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white">
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-white">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-400 border-t-transparent" />
+        <div className="px-6 text-center font-mono text-[11px] text-yellow-700">
+          conv={conversationId?.slice(0, 8)} | me={currentUserId?.slice(0, 8) ?? "—"} | loading…
+          {loadError && <div className="mt-1 text-red-600">ERR: {loadError}</div>}
+        </div>
       </div>
     );
   }
 
   const otherName = otherUser?.full_name || "User";
+
+  // Temporary debug strip — always visible so it shows in beta/production too.
+  // Remove after confirming chat history loads reliably.
+  const debugBar = (
+    <div className="bg-yellow-50 px-4 py-1 text-[11px] text-yellow-700 font-mono leading-5">
+      conv={conversationId} | me={currentUserId?.slice(0, 8)} | msgs={messages.length}
+      {messages.length > 0 && ` | last="${messages[messages.length - 1].content?.slice(0, 25)}"`}
+      {loadError && <span className="ml-2 text-red-600">ERR: {loadError}</span>}
+    </div>
+  );
 
   const renderMediaContent = (msg: ChatMessage, isMe: boolean) => {
     if (!msg.media_url || !msg.media_type) return null;
@@ -556,6 +634,8 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {debugBar}
+
       {uiMessage && (
         <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-600">
           {uiMessage}
@@ -564,7 +644,12 @@ export default function ChatPage() {
 
       {/* ── Messages ── */}
       <div className="flex-1 overflow-y-auto px-3 py-4">
-        {messages.length === 0 && (
+        {loadError && (
+          <div className="mx-4 mt-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+            {loadError}
+          </div>
+        )}
+        {!loadError && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16">
             {otherUser?.avatar_url ? (
               <img src={otherUser.avatar_url} alt="" className="h-20 w-20 rounded-full border-4 border-amber-100 object-cover" />
@@ -647,8 +732,8 @@ export default function ChatPage() {
                     <div className={`mt-1 flex items-center gap-1 text-[10px] text-gray-400 ${isMe ? "flex-row-reverse" : ""}`}>
                       <span>{formatTime(msg.created_at)}</span>
                       {isMe && !msg.pending && (
-                        <span className={msg.is_read ? "text-amber-500" : "text-gray-400"}>
-                          {msg.is_read ? "✓✓" : "✓"}
+                        <span className={(msg.read_at ?? msg.is_read) ? "text-amber-500" : "text-gray-400"}>
+                          {(msg.read_at ?? msg.is_read) ? "✓✓" : "✓"}
                         </span>
                       )}
                     </div>

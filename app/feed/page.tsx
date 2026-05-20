@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
-import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import EmptyState from "../components/ui/EmptyState";
 import Spinner from "../components/ui/Spinner";
@@ -84,6 +83,7 @@ export default function Feed() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const viewedPostsRef = useRef(new Set<string>());
   const tempIdCounter = useRef(0);
 
@@ -1128,6 +1128,15 @@ export default function Feed() {
     if (!taggedUsers.find((t) => t.id === user.id)) {
       setTaggedUsers((prev) => [...prev, user]);
     }
+    const name = user.full_name || "User";
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const cursor = textarea.selectionStart ?? content.length;
+      setContent((prev) => {
+        const before = prev.slice(0, cursor).replace(/@\w*$/, `@${name} `);
+        return before + prev.slice(cursor);
+      });
+    }
     setTagSearch("");
     setTagResults([]);
   };
@@ -1363,10 +1372,10 @@ export default function Feed() {
 
         {/* ── COMPOSE MODAL ── */}
         {showCompose && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-            <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 pb-32 pt-16">
+            <div className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl max-h-[calc(100dvh-8rem)]">
               {/* Header */}
-              <div className="mb-4 flex items-center justify-between">
+              <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4">
                 <h2 className="text-lg font-bold text-gray-900">Create Post</h2>
                 <button
                   type="button"
@@ -1381,6 +1390,9 @@ export default function Feed() {
                     setAiError(null);
                     setShowAiMenu(false);
                     setPostStatus("idle");
+                    setTaggedUsers([]);
+                    setTagSearch("");
+                    setTagResults([]);
                   }}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200"
                 >
@@ -1388,43 +1400,36 @@ export default function Feed() {
                 </button>
               </div>
 
-              {/* Form */}
-              <>
-                  <textarea
-                    placeholder="What's on your mind?"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-amber-300 focus:bg-white"
-                    rows={4}
-                    autoFocus
-                  />
-
-                  {/* Tagged users */}
-                  {taggedUsers.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {taggedUsers.map((u) => (
-                        <span key={u.id} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                          @{u.full_name}
-                          <button onClick={() => removeTaggedUser(u.id)} className="ml-0.5 text-blue-400 hover:text-blue-600">×</button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Tag user search */}
-                  <div className="mt-2 relative">
-                    <input
-                      type="text"
-                      placeholder="Tag someone... @name"
-                      value={tagSearch}
-                      onChange={(e) => searchTagUsers(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs outline-none focus:border-blue-300 focus:bg-white"
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                  {/* Textarea with inline @mention autocomplete */}
+                  <div className="relative">
+                    <textarea
+                      ref={textareaRef}
+                      placeholder="What's on your mind? Type @name to tag someone."
+                      value={content}
+                      onChange={(e) => {
+                        setContent(e.target.value);
+                        const cursor = e.target.selectionStart ?? e.target.value.length;
+                        const textBeforeCursor = e.target.value.slice(0, cursor);
+                        const match = textBeforeCursor.match(/@(\w*)$/);
+                        if (match) {
+                          searchTagUsers(match[1]);
+                        } else {
+                          setTagSearch("");
+                          setTagResults([]);
+                        }
+                      }}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-amber-300 focus:bg-white"
+                      rows={4}
+                      autoFocus
                     />
                     {tagResults.length > 0 && (
                       <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-xl border bg-white shadow-lg">
                         {tagResults.map((user) => (
                           <button
                             key={user.id}
+                            type="button"
                             onClick={() => addTaggedUser(user)}
                             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50"
                           >
@@ -1511,95 +1516,101 @@ export default function Feed() {
                     </div>
                   )}
 
-                  {/* Bottom bar */}
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="relative">
-                        <button type="button" onClick={() => setShowMediaMenu((v) => !v)}
-                          className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-2xl font-light text-gray-700 shadow-sm hover:bg-gray-50">
-                          +
+              </div>
+
+              {/* Footer — inside the card, never near BottomNav */}
+              <div className="flex-shrink-0 border-t border-gray-100 bg-white px-5 py-3">
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <button type="button" onClick={() => setShowMediaMenu((v) => !v)}
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-2xl font-light text-gray-700 shadow-sm hover:bg-gray-50">
+                      +
+                    </button>
+                    {showMediaMenu && (
+                      <div data-media-menu className="absolute bottom-12 left-0 z-10 w-52 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl">
+                        <button type="button" onClick={() => { setShowMediaMenu(false); setTimeout(() => fileInputRef.current?.click(), 10); }}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-amber-50 transition">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                          </span>
+                          Photo
                         </button>
-                      {showMediaMenu && (
-                        <div data-media-menu className="absolute bottom-12 left-0 z-10 w-52 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl">
-                          <button type="button" onClick={() => { setShowMediaMenu(false); setTimeout(() => fileInputRef.current?.click(), 10); }}
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-amber-50 transition">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                            </span>
-                            Photo
-                          </button>
-                          <button type="button" onClick={() => { setShowMediaMenu(false); setTimeout(() => audioInputRef.current?.click(), 10); }}
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-amber-50 transition">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-500">
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                            </span>
-                            Audio
-                          </button>
-                          <button type="button" onClick={() => { setShowMediaMenu(false); setTimeout(() => videoInputRef.current?.click(), 10); }}
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-amber-50 transition">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-rose-500">
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                            </span>
-                            <span className="flex flex-col items-start">
-                              Video
-                              <span className="text-[10px] font-normal text-gray-400">{myProfile?.role === "church_admin" ? "max 5 min" : "max 45s"}</span>
-                            </span>
-                          </button>
-                        </div>
-                      )}
-                      </div>
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setShowEmojiPicker((v) => !v)}
-                          className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-xl shadow-sm hover:bg-gray-50"
-                        >
-                          😊
+                        <button type="button" onClick={() => { setShowMediaMenu(false); setTimeout(() => audioInputRef.current?.click(), 10); }}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-amber-50 transition">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-500">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                          </span>
+                          Audio
                         </button>
-                        {showEmojiPicker && (
-                          <EmojiPicker
-                            onSelect={(emoji) => setContent((prev) => prev + emoji)}
-                            onClose={() => setShowEmojiPicker(false)}
-                          />
-                        )}
-                      </div>
-                      <div className="relative" data-ai-menu>
-                        <button
-                          type="button"
-                          onClick={() => setShowAiMenu((v) => !v)}
-                          disabled={!content.trim() || aiLoading}
-                          className="flex h-10 items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-600 shadow-sm hover:bg-purple-100 disabled:opacity-40"
-                        >
-                          ✨ AI
+                        <button type="button" onClick={() => { setShowMediaMenu(false); setTimeout(() => videoInputRef.current?.click(), 10); }}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-amber-50 transition">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-rose-500">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                          </span>
+                          <span className="flex flex-col items-start">
+                            Video
+                            <span className="text-[10px] font-normal text-gray-400">{myProfile?.role === "church_admin" ? "max 5 min" : "max 45s"}</span>
+                          </span>
                         </button>
-                        {showAiMenu && (
-                          <div data-ai-menu className="absolute bottom-12 left-0 z-10 w-52 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl">
-                            {[
-                              ["improve", "✍️ Improve writing"],
-                              ["shorter", "✂️ Make shorter"],
-                              ["encouraging", "🙏 More encouraging"],
-                              ["french", "🇫🇷 Translate to French"],
-                              ["english", "🇬🇧 Translate to English"],
-                              ["announcement", "📢 Church announcement"],
-                            ].map(([action, label]) => (
-                              <button
-                                key={action}
-                                type="button"
-                                onClick={() => requestAiRewrite(action)}
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-purple-50 transition"
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
                       </div>
-                    </div>
-                    <Button onClick={createPost} disabled={postStatus !== "idle"}>
-                      {postStatus === "uploading" ? "Uploading…" : postStatus === "publishing" ? "Publishing…" : "Post"}
-                    </Button>
+                    )}
                   </div>
-              </>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker((v) => !v)}
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-xl shadow-sm hover:bg-gray-50"
+                    >
+                      😊
+                    </button>
+                    {showEmojiPicker && (
+                      <EmojiPicker
+                        onSelect={(emoji) => setContent((prev) => prev + emoji)}
+                        onClose={() => setShowEmojiPicker(false)}
+                      />
+                    )}
+                  </div>
+                  <div className="relative" data-ai-menu>
+                    <button
+                      type="button"
+                      onClick={() => setShowAiMenu((v) => !v)}
+                      disabled={!content.trim() || aiLoading}
+                      className="flex h-10 items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-600 shadow-sm hover:bg-purple-100 disabled:opacity-40"
+                    >
+                      ✨ AI
+                    </button>
+                    {showAiMenu && (
+                      <div data-ai-menu className="absolute bottom-12 left-0 z-10 w-52 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl">
+                        {[
+                          ["improve", "✍️ Improve writing"],
+                          ["shorter", "✂️ Make shorter"],
+                          ["encouraging", "🙏 More encouraging"],
+                          ["french", "🇫🇷 Translate to French"],
+                          ["english", "🇬🇧 Translate to English"],
+                          ["announcement", "📢 Church announcement"],
+                        ].map(([action, label]) => (
+                          <button
+                            key={action}
+                            type="button"
+                            onClick={() => requestAiRewrite(action)}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-purple-50 transition"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={createPost}
+                  disabled={postStatus !== "idle"}
+                  className="mt-3 h-12 w-full rounded-full bg-amber-400 text-base font-bold text-white shadow-sm disabled:opacity-50"
+                >
+                  {postStatus === "uploading" ? "Uploading…" : postStatus === "publishing" ? "Publishing…" : "Post"}
+                </button>
+              </div>
             </div>
           </div>
         )}
