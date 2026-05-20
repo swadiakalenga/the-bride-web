@@ -65,6 +65,8 @@ export default function Feed() {
 
   const [likeCounts, setLikeCounts] = useState<LikeMap>({});
   const [userLikes, setUserLikes] = useState<UserLikeMap>({});
+  const [shareCounts, setShareCounts] = useState<Record<string, number>>({});
+  const [userShares, setUserShares] = useState<Record<string, boolean>>({});
 
   const [commentsByPost, setCommentsByPost] = useState<CommentMap>({});
   const [commentInputs, setCommentInputs] = useState<CommentInputMap>({});
@@ -239,6 +241,8 @@ export default function Feed() {
     setCommentsByPost({});
     setLikeCounts({});
     setUserLikes({});
+    setShareCounts({});
+    setUserShares({});
     setProfilesById({});
     setCommentLikeCounts({});
     setCommentUserLikes({});
@@ -410,6 +414,7 @@ export default function Feed() {
 
     await Promise.all([
       loadLikes(postList),
+      loadShares(postList),
       loadProfiles(postList, comments),
       loadViewCounts(postList.map((p) => p.id)),
     ]);
@@ -445,6 +450,59 @@ export default function Feed() {
 
     setLikeCounts(counts);
     setUserLikes(userMap);
+  };
+
+  const loadShares = async (postList: Post[]) => {
+    const ids = postList.map((p) => p.id);
+    if (ids.length === 0) {
+      setShareCounts({});
+      setUserShares({});
+      return;
+    }
+    const { data } = await supabase
+      .from("post_shares")
+      .select("post_id, user_id")
+      .in("post_id", ids);
+
+    const counts: Record<string, number> = {};
+    const userMap: Record<string, boolean> = {};
+    data?.forEach((s) => {
+      counts[s.post_id] = (counts[s.post_id] || 0) + 1;
+      if (s.user_id === currentUserId) userMap[s.post_id] = true;
+    });
+    setShareCounts(counts);
+    setUserShares(userMap);
+  };
+
+  const toggleShare = async (postId: string) => {
+    if (!currentUserId) return;
+    const alreadyShared = userShares[postId];
+
+    setUserShares((prev) => ({ ...prev, [postId]: !alreadyShared }));
+    setShareCounts((prev) => ({
+      ...prev,
+      [postId]: Math.max(0, (prev[postId] || 0) + (alreadyShared ? -1 : 1)),
+    }));
+
+    if (alreadyShared) {
+      const { error } = await supabase
+        .from("post_shares")
+        .delete()
+        .eq("post_id", postId)
+        .eq("user_id", currentUserId);
+      if (error) {
+        setUserShares((prev) => ({ ...prev, [postId]: true }));
+        setShareCounts((prev) => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
+      }
+    } else {
+      const { error } = await supabase
+        .from("post_shares")
+        .insert([{ post_id: postId, user_id: currentUserId }]);
+      if (error) {
+        setUserShares((prev) => ({ ...prev, [postId]: false }));
+        setShareCounts((prev) => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 0) - 1) }));
+      }
+    }
   };
 
   const loadComments = async (postList: Post[]) => {
@@ -1806,6 +1864,29 @@ export default function Feed() {
                             </svg>
                             <span>{commentCount}</span>
                           </button>
+
+                          {feedType === "people" && currentUserId !== post.user_id && (
+                            <button
+                              onClick={() => toggleShare(post.id)}
+                              className={`flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                                userShares[post.id]
+                                  ? "bg-brand-50 text-brand-600"
+                                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                              }`}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
+                                <polyline points="16 6 12 2 8 6" />
+                                <line x1="12" y1="2" x2="12" y2="15" />
+                              </svg>
+                              <span>
+                                {lang === "fr"
+                                  ? (userShares[post.id] ? "Partagé" : "Partager")
+                                  : (userShares[post.id] ? "Shared" : "Share")}
+                                {(shareCounts[post.id] || 0) > 0 && ` (${shareCounts[post.id]})`}
+                              </span>
+                            </button>
+                          )}
 
                           {feedType === "people" && currentUserId === post.user_id && editingPostId !== post.id && (
                             <>

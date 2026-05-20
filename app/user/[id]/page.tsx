@@ -7,6 +7,8 @@ import { useLanguage } from "../../../lib/useLanguage";
 import BottomNav from "../../components/ui/BottomNav";
 import Card from "../../components/ui/Card";
 import FollowListModal from "../../components/ui/FollowListModal";
+import PostCard from "../../components/feed/PostCard";
+import type { Post } from "../../../lib/types";
 
 type Profile = {
   id: string;
@@ -34,7 +36,7 @@ type Church = {
 export default function UserProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const userId = params?.id as string;
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -62,6 +64,14 @@ export default function UserProfilePage() {
   const [membershipLoading, setMembershipLoading] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const [liveStreamId, setLiveStreamId] = useState<string | null>(null);
+
+  // Posts section
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [userSharedPosts, setUserSharedPosts] = useState<Post[]>([]);
+  const [postLikeCounts, setPostLikeCounts] = useState<Record<string, number>>({});
+  const [postUserLikes, setPostUserLikes] = useState<Record<string, boolean>>({});
+  const [postShareCounts, setPostShareCounts] = useState<Record<string, number>>({});
+  const [postUserShares, setPostUserShares] = useState<Record<string, boolean>>({});
 
   // Block / Mute / Report state
   const [isBlocked, setIsBlocked] = useState(false);
@@ -213,7 +223,97 @@ export default function UserProfilePage() {
     }
 
     setLoading(false);
+    loadUserPosts(userId, me);
   }
+
+  const loadUserPosts = async (ownerId: string, viewerId: string | null) => {
+    const [{ data: ownPostsData }, { data: sharesData }] = await Promise.all([
+      supabase.from("posts").select("*").eq("user_id", ownerId).is("church_id", null).order("created_at", { ascending: false }),
+      supabase.from("post_shares").select("post_id").eq("user_id", ownerId).order("created_at", { ascending: false }),
+    ]);
+
+    const ownPosts = ownPostsData || [];
+    setUserPosts(ownPosts);
+
+    let sharedPostList: Post[] = [];
+    if (sharesData && sharesData.length > 0) {
+      const { data: sharedData } = await supabase
+        .from("posts")
+        .select("*")
+        .in("id", sharesData.map((s) => s.post_id));
+      sharedPostList = sharedData || [];
+    }
+    setUserSharedPosts(sharedPostList);
+
+    const allIds = [...ownPosts.map((p) => p.id), ...sharedPostList.map((p) => p.id)];
+    if (allIds.length === 0) return;
+
+    const [{ data: likeData }, { data: shareCountData }] = await Promise.all([
+      supabase.from("likes").select("post_id, user_id").in("post_id", allIds),
+      supabase.from("post_shares").select("post_id, user_id").in("post_id", allIds),
+    ]);
+
+    const lCounts: Record<string, number> = {};
+    const lUser: Record<string, boolean> = {};
+    likeData?.forEach((l) => {
+      lCounts[l.post_id] = (lCounts[l.post_id] || 0) + 1;
+      if (viewerId && l.user_id === viewerId) lUser[l.post_id] = true;
+    });
+
+    const sCounts: Record<string, number> = {};
+    const sUser: Record<string, boolean> = {};
+    shareCountData?.forEach((s) => {
+      sCounts[s.post_id] = (sCounts[s.post_id] || 0) + 1;
+      if (viewerId && s.user_id === viewerId) sUser[s.post_id] = true;
+    });
+
+    setPostLikeCounts(lCounts);
+    setPostUserLikes(lUser);
+    setPostShareCounts(sCounts);
+    setPostUserShares(sUser);
+  };
+
+  const toggleUserPostLike = async (postId: string) => {
+    if (!currentUserId) return;
+    const liked = postUserLikes[postId];
+    setPostUserLikes((p) => ({ ...p, [postId]: !liked }));
+    setPostLikeCounts((p) => ({ ...p, [postId]: Math.max(0, (p[postId] || 0) + (liked ? -1 : 1)) }));
+    if (liked) {
+      await supabase.from("likes").delete().eq("post_id", postId).eq("user_id", currentUserId);
+    } else {
+      await supabase.from("likes").insert([{ post_id: postId, user_id: currentUserId }]);
+    }
+  };
+
+  const toggleUserPostShare = async (postId: string) => {
+    if (!currentUserId) return;
+    const shared = postUserShares[postId];
+    setPostUserShares((p) => ({ ...p, [postId]: !shared }));
+    setPostShareCounts((p) => ({ ...p, [postId]: Math.max(0, (p[postId] || 0) + (shared ? -1 : 1)) }));
+    if (shared) {
+      await supabase.from("post_shares").delete().eq("post_id", postId).eq("user_id", currentUserId);
+    } else {
+      await supabase.from("post_shares").insert([{ post_id: postId, user_id: currentUserId }]);
+    }
+  };
+
+  const handleOwnPostEdit = async (updatedPost: Post) => {
+    if (!currentUserId) return;
+    const { error } = await supabase
+      .from("posts")
+      .update({ content: updatedPost.content })
+      .eq("id", updatedPost.id)
+      .eq("user_id", currentUserId);
+    if (!error) {
+      setUserPosts((prev) => prev.map((p) => p.id === updatedPost.id ? { ...p, content: updatedPost.content } : p));
+    }
+  };
+
+  const handleOwnPostDelete = async (postId: string) => {
+    if (!currentUserId) return;
+    await supabase.from("posts").delete().eq("id", postId).eq("user_id", currentUserId);
+    setUserPosts((prev) => prev.filter((p) => p.id !== postId));
+  };
 
   const loadMessagingState = async (me: string, targetId: string) => {
     const { data: myParticipations } = await supabase
@@ -724,6 +824,57 @@ export default function UserProfilePage() {
                 )}
               </div>
             </div>
+
+            {/* ── Posts section ── */}
+            {(userPosts.length > 0 || userSharedPosts.length > 0) && (
+              <div className="mt-5 space-y-3">
+                <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">
+                  {lang === "fr" ? "Publications" : "Posts"}
+                </h2>
+
+                {userPosts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    currentUserId={currentUserId}
+                    likeCounts={postLikeCounts}
+                    userLikes={postUserLikes}
+                    onLike={toggleUserPostLike}
+                    shareCounts={postShareCounts}
+                    userShares={postUserShares}
+                    onShare={currentUserId && currentUserId !== post.user_id ? toggleUserPostShare : undefined}
+                    isOwner={currentUserId === post.user_id}
+                    onEdit={currentUserId === post.user_id ? handleOwnPostEdit : undefined}
+                    onDelete={currentUserId === post.user_id ? handleOwnPostDelete : undefined}
+                    lang={lang}
+                  />
+                ))}
+
+                {userSharedPosts.length > 0 && (
+                  <>
+                    <h2 className="pt-2 text-sm font-bold uppercase tracking-wide text-gray-500">
+                      {lang === "fr" ? "Partagés" : "Shared"}
+                    </h2>
+                    {userSharedPosts.map((post) => (
+                      <PostCard
+                        key={`shared-${post.id}`}
+                        post={post}
+                        currentUserId={currentUserId}
+                        likeCounts={postLikeCounts}
+                        userLikes={postUserLikes}
+                        onLike={toggleUserPostLike}
+                        shareCounts={postShareCounts}
+                        userShares={postUserShares}
+                        onShare={currentUserId && currentUserId !== post.user_id ? toggleUserPostShare : undefined}
+                        isOwner={false}
+                        lang={lang}
+                        sharedByName={profile?.full_name ?? null}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
           </section>
 
           {/* ── Right sidebar ── */}

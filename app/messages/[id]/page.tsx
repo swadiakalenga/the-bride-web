@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { validateUpload } from "../../../lib/validateUpload";
+import { useLanguage } from "../../../lib/useLanguage";
 import EmojiPicker from "../../components/ui/EmojiPicker";
 import type { ChatMessage } from "../../../lib/types";
 
@@ -58,9 +59,21 @@ function isSameDay(a: string, b: string) {
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 }
 
+const mediaErrMsg = {
+  uploadFailed: {
+    fr: "Échec de l'envoi du fichier. Veuillez réessayer.",
+    en: "File upload failed. Please try again.",
+  },
+  sendFailed: {
+    fr: "Impossible d'envoyer le média. Veuillez réessayer.",
+    en: "Failed to send media. Please try again.",
+  },
+};
+
 export default function ChatPage() {
   const params = useParams();
   const router = useRouter();
+  const { lang } = useLanguage();
   const conversationId = params.id as string;
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -404,7 +417,7 @@ export default function ChatPage() {
 
     if (uploadError) {
       setUploading(false);
-      setUiMessage(`Upload failed: ${uploadError.message}`);
+      setUiMessage(mediaErrMsg.uploadFailed[lang]);
       return;
     }
 
@@ -438,7 +451,7 @@ export default function ChatPage() {
 
     if (error) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setUiMessage(`Failed to send media: ${error.message}`);
+      setUiMessage(mediaErrMsg.sendFailed[lang]);
     } else if (otherUser?.id) {
       supabase.from("notifications").insert([{
         recipient_user_id: otherUser.id,
