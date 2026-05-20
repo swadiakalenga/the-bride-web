@@ -6,6 +6,7 @@ import { supabase } from "../../lib/supabase";
 import { useLanguage } from "../../lib/useLanguage";
 import BottomNav from "../components/ui/BottomNav";
 import Card from "../components/ui/Card";
+import FollowListModal from "../components/ui/FollowListModal";
 
 type Profile = {
   id: string;
@@ -66,6 +67,7 @@ export default function ProfilePage() {
 
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const [followModal, setFollowModal] = useState<"followers" | "following" | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -389,14 +391,20 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="mt-6 flex items-center justify-center gap-8 rounded-xl bg-gray-50 p-4">
-                    <div className="text-center">
+                    <button
+                      onClick={() => setFollowModal("followers")}
+                      className="text-center hover:opacity-75 transition-opacity"
+                    >
                       <p className="text-2xl font-bold">{followersCount}</p>
                       <p className="text-sm text-gray-500">{t("profile_followers")}</p>
-                    </div>
-                    <div className="text-center">
+                    </button>
+                    <button
+                      onClick={() => setFollowModal("following")}
+                      className="text-center hover:opacity-75 transition-opacity"
+                    >
                       <p className="text-2xl font-bold">{followingCount}</p>
                       <p className="text-sm text-gray-500">{t("profile_following")}</p>
-                    </div>
+                    </button>
                   </div>
 
                   <button
@@ -726,6 +734,15 @@ export default function ProfilePage() {
       <div className="lg:hidden">
         <BottomNav />
       </div>
+
+      {followModal && profile && (
+        <FollowListModal
+          targetUserId={profile.id}
+          type={followModal}
+          currentUserId={profile.id}
+          onClose={() => setFollowModal(null)}
+        />
+      )}
     </main>
   );
 }

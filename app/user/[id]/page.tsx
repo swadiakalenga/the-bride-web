@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { useLanguage } from "../../../lib/useLanguage";
 import BottomNav from "../../components/ui/BottomNav";
 import Card from "../../components/ui/Card";
+import FollowListModal from "../../components/ui/FollowListModal";
 
 type Profile = {
   id: string;
@@ -32,6 +34,7 @@ type Church = {
 export default function UserProfilePage() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useLanguage();
   const userId = params?.id as string;
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -43,6 +46,7 @@ export default function UserProfilePage() {
   const [isFollowingChurch, setIsFollowingChurch] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const [followModal, setFollowModal] = useState<"followers" | "following" | null>(null);
   const [loading, setLoading] = useState(true);
   const [uiMessage, setUiMessage] = useState("");
 
@@ -465,15 +469,21 @@ export default function UserProfilePage() {
 
                 {/* Stats */}
                 <div className="mt-4 flex w-full items-center justify-center gap-8 rounded-xl bg-gray-50 p-4">
-                  <div className="text-center">
+                  <button
+                    onClick={() => setFollowModal("followers")}
+                    className="text-center hover:opacity-75 transition-opacity"
+                  >
                     <p className="text-2xl font-bold text-gray-900">{followersCount}</p>
-                    <p className="text-sm text-gray-500">Followers</p>
-                  </div>
+                    <p className="text-sm text-gray-500">{t("profile_followers")}</p>
+                  </button>
                   <div className="h-8 w-px bg-gray-200" />
-                  <div className="text-center">
+                  <button
+                    onClick={() => setFollowModal("following")}
+                    className="text-center hover:opacity-75 transition-opacity"
+                  >
                     <p className="text-2xl font-bold text-gray-900">{followingCount}</p>
-                    <p className="text-sm text-gray-500">Following</p>
-                  </div>
+                    <p className="text-sm text-gray-500">{t("profile_following")}</p>
+                  </button>
                 </div>
 
                 {/* Action buttons — only for other people's profiles */}
@@ -758,6 +768,15 @@ export default function UserProfilePage() {
       <div className="lg:hidden">
         <BottomNav />
       </div>
+
+      {followModal && profile && (
+        <FollowListModal
+          targetUserId={profile.id}
+          type={followModal}
+          currentUserId={currentUserId}
+          onClose={() => setFollowModal(null)}
+        />
+      )}
     </main>
   );
 }
