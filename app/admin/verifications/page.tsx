@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
 
@@ -9,7 +9,7 @@ type VerifRow = {
   church_id: string;
   church_name: string | null;
   submitted_by: string;
-  submitter_name: string | null;
+  submitted_by_name: string | null;
   status: string;
   pastor_name: string | null;
   contact_email: string | null;
@@ -30,33 +30,19 @@ export default function AdminVerificationsPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [reasonMap, setReasonMap] = useState<Record<string, string>>({});
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const { data, error: dbError } = await supabase
-      .from("church_verifications")
-      .select(`
-        id, church_id, submitted_by, status,
-        pastor_name, contact_email, contact_phone, address,
-        registration_doc_url, pastor_id_url, address_proof_url,
-        rejection_reason, created_at,
-        churches ( name ),
-        profiles ( full_name )
-      `)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
-
-    if (dbError) { setError(dbError.message); }
-    else {
-      setVerifs((data ?? []).map((row: Record<string, unknown>) => ({
-        ...row,
-        church_name: (row.churches as { name?: string } | null)?.name ?? null,
-        submitter_name: (row.profiles as { full_name?: string } | null)?.full_name ?? null,
-      })) as VerifRow[]);
-    }
+    setError("");
+    const { data, error: rpcError } = await supabase.rpc(
+      "admin_list_church_verifications",
+      { p_status: "pending", p_limit: 100, p_offset: 0 }
+    );
+    if (rpcError) setError(rpcError.message);
+    else setVerifs((data as VerifRow[]) ?? []);
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const review = async (churchId: string, status: "verified" | "rejected", reason?: string) => {
     setSavingId(churchId);
@@ -91,6 +77,9 @@ export default function AdminVerificationsPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="font-semibold text-gray-900">{v.church_name ?? v.church_id}</p>
+                  <p className="text-xs text-gray-500">
+                    {t("admin_churches_admin")}: {v.submitted_by_name ?? "—"}
+                  </p>
                   <p className="text-xs text-gray-400">
                     {t("verify_pastor_name")}: {v.pastor_name ?? "—"} ·{" "}
                     {t("verify_email")}: {v.contact_email ?? "—"} ·{" "}
@@ -140,7 +129,7 @@ export default function AdminVerificationsPage() {
                 )}
               </div>
 
-              {/* Rejection reason input */}
+              {/* Rejection reason */}
               <textarea
                 rows={2}
                 placeholder={t("admin_verif_reason")}

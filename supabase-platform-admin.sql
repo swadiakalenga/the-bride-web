@@ -130,14 +130,14 @@ begin
   return query
   select
     p.id,
-    p.full_name,
-    p.role,
-    p.account_type,
+    p.full_name::text,
+    p.role::text,
+    p.account_type::text,
     p.church_id,
-    p.city,
-    p.country,
+    p.city::text,
+    p.country::text,
     u.created_at,
-    u.email
+    u.email::text
   from public.profiles p
   join auth.users u on u.id = p.id
   where (
@@ -388,7 +388,72 @@ revoke all on function public.admin_set_user_role(uuid, text) from public;
 grant execute on function public.admin_set_user_role(uuid, text) to authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 12. Ensure reports is published to realtime (optional, for live admin badge)
+-- 12. admin_list_church_verifications()
+--     Manual join — avoids relying on an FK between submitted_by and profiles.
+-- ─────────────────────────────────────────────────────────────────────────────
+create or replace function public.admin_list_church_verifications(
+  p_status text default 'pending',
+  p_limit  int  default 50,
+  p_offset int  default 0
+)
+returns table (
+  id                   uuid,
+  church_id            uuid,
+  church_name          text,
+  submitted_by         uuid,
+  submitted_by_name    text,
+  status               text,
+  pastor_name          text,
+  contact_email        text,
+  contact_phone        text,
+  address              text,
+  registration_doc_url text,
+  pastor_id_url        text,
+  address_proof_url    text,
+  rejection_reason     text,
+  created_at           timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Not authorized';
+  end if;
+
+  return query
+  select
+    cv.id,
+    cv.church_id,
+    c.name::text                    as church_name,
+    cv.submitted_by,
+    p.full_name::text               as submitted_by_name,
+    cv.status::text,
+    cv.pastor_name::text,
+    cv.contact_email::text,
+    cv.contact_phone::text,
+    cv.address::text,
+    cv.registration_doc_url::text,
+    cv.pastor_id_url::text,
+    cv.address_proof_url::text,
+    cv.rejection_reason::text,
+    cv.created_at
+  from public.church_verifications cv
+  left join public.churches  c on c.id  = cv.church_id
+  left join public.profiles  p on p.id  = cv.submitted_by
+  where (p_status = 'all' or cv.status::text = p_status)
+  order by cv.created_at desc
+  limit  p_limit
+  offset p_offset;
+end;
+$$;
+
+revoke all on function public.admin_list_church_verifications(text, int, int) from public;
+grant execute on function public.admin_list_church_verifications(text, int, int) to authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 13. Ensure reports is published to realtime (optional, for live admin badge)
 -- ─────────────────────────────────────────────────────────────────────────────
 do $$
 begin

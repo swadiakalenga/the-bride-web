@@ -532,16 +532,39 @@ export default function Feed() {
       video.src = URL.createObjectURL(file);
     });
 
+  // Wraps a promise with a timeout; rejects with a clear message on expiry.
+  function withUploadTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} upload timed out after ${ms / 1000}s`)), ms)
+      ),
+    ]);
+  }
+
   const uploadSingleFile = async (
     userId: string,
     file: File,
     folder: string
   ): Promise<string | null> => {
-    const ext = file.name.split(".").pop();
+    const ext = file.name.split(".").pop() || "bin";
+    const mime = file.type || "application/octet-stream";
     const path = `${folder}/${userId}-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("media").upload(path, file);
-    if (error) {
-      setErrorMessage(`Upload failed: ${error.message}`);
+    console.log(`[upload] ${folder}:`, { path, mime, size: file.size, name: file.name });
+    try {
+      const { error } = await withUploadTimeout(
+        supabase.storage.from("media").upload(path, file, { contentType: mime }),
+        60_000,
+        folder
+      );
+      if (error) {
+        console.error(`[upload] ${folder} storage error:`, error.message, error);
+        setErrorMessage(`Upload failed (${folder}): ${error.message}`);
+        return null;
+      }
+    } catch (err) {
+      console.error(`[upload] ${folder} exception:`, err);
+      setErrorMessage(`Upload failed (${folder}): ${(err as Error).message}`);
       return null;
     }
     const { data } = supabase.storage.from("media").getPublicUrl(path);
@@ -550,30 +573,49 @@ export default function Feed() {
 
   const uploadImages = async (userId: string): Promise<string[] | null> => {
     if (selectedImages.length === 0) return [];
+    // Stable timestamp prefix; index i guarantees unique paths in the same batch.
+    const ts = Date.now();
 
     const results = await Promise.all(
       selectedImages.map(async (file, i) => {
-        const ext = file.name.split(".").pop();
-        const path = `posts/${userId}-${Date.now()}-${i}.${ext}`;
-
-        const { error } = await supabase.storage
-          .from("media")
-          .upload(path, file);
-
-        if (error) return { error: error.message, url: null };
-
-        const { data } = supabase.storage.from("media").getPublicUrl(path);
-        return { error: null, url: data.publicUrl };
+        const ext = file.name.split(".").pop() || "jpg";
+        const mime = file.type || "image/jpeg";
+        const path = `posts/${userId}-${ts}-${i}.${ext}`;
+        console.log(`[upload] image ${i}:`, { path, mime, size: file.size, name: file.name });
+        try {
+          const { error } = await withUploadTimeout(
+            supabase.storage.from("media").upload(path, file, { contentType: mime }),
+            30_000,
+            `image-${i}`
+          );
+          if (error) {
+            console.error(`[upload] image ${i} storage error:`, error.message, error);
+            return { error: error.message, url: null };
+          }
+          const { data } = supabase.storage.from("media").getPublicUrl(path);
+          return { error: null, url: data.publicUrl };
+        } catch (err) {
+          console.error(`[upload] image ${i} exception:`, err);
+          return { error: (err as Error).message, url: null };
+        }
       })
     );
 
-    const failed = results.find((r) => r.error);
-    if (failed) {
-      setErrorMessage(`Image upload failed: ${failed.error}`);
+    const failed = results.filter((r) => r.error);
+    const succeeded = results.filter((r) => r.url);
+    console.log(`[upload] images: ${succeeded.length} ok, ${failed.length} failed`);
+
+    if (failed.length > 0 && succeeded.length === 0) {
+      // All failed — block the post.
+      setErrorMessage(`Image upload failed: ${failed[0].error}`);
       return null;
     }
+    if (failed.length > 0) {
+      // Partial success — continue with uploaded images, warn user.
+      setErrorMessage(`Warning: ${failed.length} of ${results.length} image(s) failed to upload. Posting with ${succeeded.length}.`);
+    }
 
-    return results.map((r) => r.url as string);
+    return succeeded.map((r) => r.url as string);
   };
 
   async function loadLiveStreams() {
@@ -743,11 +785,15 @@ export default function Feed() {
       postPayload.tagged_user_ids = taggedUsers.map((u) => u.id);
     }
 
+    console.log("[createPost] payload:", JSON.stringify(postPayload));
     const { error } = await supabase.from("posts").insert([postPayload]);
 
     if (error) {
+      console.error("[createPost] insert error:", error.message);
+      console.error("[createPost] code:", error.code, "| details:", error.details, "| hint:", error.hint);
       setPostStatus("failed");
-      setErrorMessage(`Post failed: ${error.message}`);
+      const detail = error.hint ? `${error.message} — ${error.hint}` : error.message;
+      setErrorMessage(`Post failed: ${detail}`);
       return;
     }
 
@@ -1483,7 +1529,9 @@ export default function Feed() {
                     <p className="mt-3 text-xs text-blue-500">Publishing post…</p>
                   )}
                   {postStatus === "failed" && (
-                    <p className="mt-3 text-xs text-red-500">Post failed — your content is saved above, try again.</p>
+                    <p className="mt-3 text-xs text-red-500">
+                      {uiMessage || "Post failed — please try again."}
+                    </p>
                   )}
 
                   {/* AI feedback */}
