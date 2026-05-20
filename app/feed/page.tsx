@@ -1256,7 +1256,7 @@ export default function Feed() {
                 <button
                   type="button"
                   onClick={() => setShowGoLive(true)}
-                  className="flex h-8 items-center gap-1.5 rounded-full bg-blue-500 px-3 text-xs font-bold text-white"
+                  className="flex h-8 items-center gap-1.5 rounded-full bg-brand-500 px-3 text-xs font-bold text-white"
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
                   Go Live
@@ -1315,7 +1315,7 @@ export default function Feed() {
             onClick={() => setFeedType("church")}
             className={`flex-1 py-3 text-sm font-semibold transition ${
               feedType === "church"
-                ? "border-b-2 border-blue-500 text-blue-500"
+                ? "border-b-2 border-brand-500 text-brand-500"
                 : "text-gray-400 hover:text-gray-600"
             }`}
           >
@@ -1538,10 +1538,10 @@ export default function Feed() {
 
                   {/* Posting status */}
                   {postStatus === "uploading" && (
-                    <p className="mt-3 text-xs text-blue-500">Uploading media…</p>
+                    <p className="mt-3 text-xs text-brand-500">Uploading media…</p>
                   )}
                   {postStatus === "publishing" && (
-                    <p className="mt-3 text-xs text-blue-500">Publishing post…</p>
+                    <p className="mt-3 text-xs text-brand-500">Publishing post…</p>
                   )}
                   {postStatus === "failed" && (
                     <p className="mt-3 text-xs text-red-500">
@@ -1593,7 +1593,7 @@ export default function Feed() {
                       <div data-media-menu className="absolute bottom-12 left-0 z-10 w-52 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl">
                         <button type="button" onClick={() => { setShowMediaMenu(false); setTimeout(() => fileInputRef.current?.click(), 10); }}
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-amber-50 transition">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-500">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                           </span>
                           Photo
@@ -1744,7 +1744,7 @@ export default function Feed() {
                                   <button
                                     key={uid}
                                     onClick={() => router.push(`/user/${uid}`)}
-                                    className="text-xs font-medium text-blue-500 hover:underline"
+                                    className="text-xs font-medium text-brand-500 hover:underline"
                                   >
                                     @{p?.full_name || "user"}
                                   </button>
@@ -1789,7 +1789,7 @@ export default function Feed() {
 
                           <button
                             onClick={() => toggleCommentBox(post.id)}
-                            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-gray-400 transition hover:bg-gray-100 hover:text-blue-500"
+                            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-gray-400 transition hover:bg-gray-100 hover:text-brand-500"
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
@@ -1799,7 +1799,7 @@ export default function Feed() {
 
                           {feedType === "people" && currentUserId === post.user_id && editingPostId !== post.id && (
                             <>
-                              <button onClick={() => startEditing(post)} className="rounded-full px-2.5 py-1 text-gray-400 hover:bg-gray-100 hover:text-blue-500">
+                              <button onClick={() => startEditing(post)} className="rounded-full px-2.5 py-1 text-gray-400 hover:bg-gray-100 hover:text-brand-500">
                                 Edit
                               </button>
                               <button onClick={() => deletePost(post.id)} className="rounded-full px-2.5 py-1 text-gray-400 hover:bg-gray-100 hover:text-red-500">
@@ -1839,7 +1839,7 @@ export default function Feed() {
                                             {commentUserLikes[comment.id] ? "♥" : "♡"} {commentLikeCounts[comment.id] || 0}
                                           </button>
 
-                                          <button onClick={() => toggleReplyBox(comment.id)} className="hover:text-blue-500">
+                                          <button onClick={() => toggleReplyBox(comment.id)} className="hover:text-brand-500">
                                             Reply {replies.length > 0 && `(${replies.length})`}
                                           </button>
 
@@ -1923,7 +1923,7 @@ export default function Feed() {
                           {commentCount > 1 && (
                             <button
                               onClick={() => toggleShowAllComments(post.id)}
-                              className="mt-2 text-xs font-medium text-blue-500 hover:text-blue-600"
+                              className="mt-2 text-xs font-medium text-brand-500 hover:text-brand-600"
                             >
                               {showAllComments[post.id] ? "Show less" : `View all ${commentCount} comments`}
                             </button>

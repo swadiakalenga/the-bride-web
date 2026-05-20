@@ -517,7 +517,7 @@ export default function UserProfilePage() {
                     className={`mt-2 w-full rounded-xl py-2.5 text-sm font-semibold transition ${
                       isFollowingChurch
                         ? "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                        : "bg-blue-500 text-white hover:bg-blue-600"
+                        : "bg-brand-500 text-white hover:bg-brand-600"
                     }`}
                   >
                     {isFollowingChurch ? "Following Church" : `Follow ${church.name}`}
@@ -561,7 +561,7 @@ export default function UserProfilePage() {
                 {isOwnProfile && isChurchProfile && profile.church_id && (
                   <button
                     onClick={() => router.push(`/church/${profile.church_id}/members`)}
-                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-100"
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-50 py-2.5 text-sm font-semibold text-brand-600 hover:bg-brand-100"
                   >
                     👥 Manage Members
                   </button>
@@ -604,7 +604,7 @@ export default function UserProfilePage() {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-gray-400">
                           <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" />
                         </svg>
-                        <a href={`mailto:${church.email}`} className="text-blue-500 hover:underline">{church.email}</a>
+                        <a href={`mailto:${church.email}`} className="text-brand-500 hover:underline">{church.email}</a>
                       </div>
                     )}
 
@@ -613,7 +613,7 @@ export default function UserProfilePage() {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-gray-400">
                           <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14h0v2.92z" />
                         </svg>
-                        <a href={`tel:${church.phone}`} className="text-blue-500 hover:underline">{church.phone}</a>
+                        <a href={`tel:${church.phone}`} className="text-brand-500 hover:underline">{church.phone}</a>
                       </div>
                     )}
                   </>
@@ -662,7 +662,7 @@ export default function UserProfilePage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
-                      <span className={`h-2 w-2 flex-shrink-0 rounded-full ${theyFollowMe ? "bg-blue-400" : "bg-gray-200"}`} />
+                      <span className={`h-2 w-2 flex-shrink-0 rounded-full ${theyFollowMe ? "bg-brand-400" : "bg-gray-200"}`} />
                       <span className={theyFollowMe ? "text-gray-700" : "text-gray-400"}>
                         {firstName} follows you
                       </span>

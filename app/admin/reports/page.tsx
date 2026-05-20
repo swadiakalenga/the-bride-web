@@ -100,7 +100,7 @@ export default function AdminReportsPage() {
                   r.status === "pending" ? "bg-amber-100 text-amber-700"
                   : r.status === "resolved" ? "bg-emerald-100 text-emerald-700"
                   : r.status === "dismissed" ? "bg-gray-100 text-gray-500"
-                  : "bg-blue-100 text-blue-700"
+                  : "bg-brand-100 text-brand-700"
                 }`}>
                   {r.status}
                 </span>
@@ -119,7 +119,7 @@ export default function AdminReportsPage() {
                     <button
                       disabled={savingId === r.id}
                       onClick={() => update(r.id, "reviewed")}
-                      className="rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-200 disabled:opacity-50"
+                      className="rounded-lg bg-brand-100 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-200 disabled:opacity-50"
                     >
                       {t("admin_reports_reviewed")}
                     </button>

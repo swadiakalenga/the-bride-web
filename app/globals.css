@@ -1,14 +1,43 @@
 @import "tailwindcss";
 
+/* ─── Brand colour tokens ────────────────────────────────────────────────────
+   Derived from the TheBride logo:
+     Primary orange  #ff9800  brand-500
+     Deep orange     #ff6a00  brand-600  ← main action colour
+     Gold highlight  #ffcc00
+     Crimson         #d72638  crimson-500
+     Purple accent   #6a00ff  accent-500
+   ────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: #f8f8f8;
-  --foreground: #171717;
-  --brand-amber: #F59E0B;
-  --brand-amber-dark: #D97706;
-  --brand-amber-light: #FDE68A;
-  --brand-blue: #3B82F6;
-  --brand-blue-dark: #2563EB;
-  --brand-blue-light: #DBEAFE;
+  --background: #faf8f5;
+  --foreground: #1a1a1a;
+
+  /* Brand scale — warm orange */
+  --brand-50:  #fff7ed;
+  --brand-100: #ffedd5;
+  --brand-200: #fcd3a0;
+  --brand-300: #fba86a;
+  --brand-400: #f97c33;
+  --brand-500: #ff9800;
+  --brand-600: #ff6a00;
+  --brand-700: #c2410c;
+  --brand-800: #9a3412;
+  --brand-900: #7c2d12;
+  --brand-950: #431407;
+
+  /* Crimson — red accent from logo bottom */
+  --crimson-50:  #fff1f2;
+  --crimson-100: #ffe4e6;
+  --crimson-500: #d72638;
+  --crimson-600: #b91c1c;
+  --crimson-700: #991b1b;
+
+  /* Accent — purple from logo */
+  --accent-50:  #f5f3ff;
+  --accent-100: #ede9fe;
+  --accent-500: #6a00ff;
+  --accent-600: #5800cc;
+  --accent-700: #4400a0;
 }
 
 @theme inline {
@@ -16,6 +45,31 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Expose brand scale as Tailwind utilities: bg-brand-500, text-brand-600, etc. */
+  --color-brand-50:  var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+  --color-brand-950: var(--brand-950);
+
+  --color-crimson-50:  var(--crimson-50);
+  --color-crimson-100: var(--crimson-100);
+  --color-crimson-500: var(--crimson-500);
+  --color-crimson-600: var(--crimson-600);
+  --color-crimson-700: var(--crimson-700);
+
+  --color-accent-50:  var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
 }
 
 body {
@@ -24,10 +78,18 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* TheBride gradient text utility */
+/* ─── Gradient utilities ─────────────────────────────────────────────────── */
 .brand-gradient {
-  background: linear-gradient(135deg, #F59E0B 0%, #3B82F6 100%);
+  background: linear-gradient(135deg, #ff9800 0%, #ff6a00 60%, #d72638 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.brand-gradient-bg {
+  background: linear-gradient(135deg, #ff9800 0%, #ff6a00 60%, #d72638 100%);
+}
+
+.brand-gradient-bg-subtle {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
 }

@@ -176,7 +176,7 @@ export default function SearchPage() {
             <button
               type="button"
               onClick={() => setActiveTab("churches")}
-              className={`rounded-full py-2 transition ${activeTab === "churches" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}
+              className={`rounded-full py-2 transition ${activeTab === "churches" ? "bg-white text-brand-600 shadow-sm" : "text-gray-500"}`}
             >
               Churches
             </button>
@@ -241,7 +241,7 @@ export default function SearchPage() {
                     onClick={() => router.push(`/church/${church.id}`)}
                     className="flex w-full items-center gap-3 text-left"
                   >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 font-bold text-blue-600">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 font-bold text-brand-600">
                       {church.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -255,7 +255,7 @@ export default function SearchPage() {
                   <button
                     type="button"
                     onClick={() => toggleChurchFollow(church.id)}
-                    className={`mt-3 w-full rounded-full px-3 py-2 text-sm font-semibold transition ${isFollowing ? "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" : "bg-blue-500 text-white hover:bg-blue-600"}`}
+                    className={`mt-3 w-full rounded-full px-3 py-2 text-sm font-semibold transition ${isFollowing ? "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" : "bg-brand-500 text-white hover:bg-brand-600"}`}
                   >
                     {isFollowing ? "Following" : "Follow church"}
                   </button>

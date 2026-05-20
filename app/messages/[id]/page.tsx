@@ -493,7 +493,7 @@ export default function ChatPage() {
 
     if (msg.media_type === "audio") {
       return (
-        <div className={`flex items-center gap-2 rounded-xl px-3 py-2 ${isMe ? "bg-blue-400" : "bg-gray-200"}`}>
+        <div className={`flex items-center gap-2 rounded-xl px-3 py-2 ${isMe ? "bg-brand-400" : "bg-gray-200"}`}>
           <span className="text-lg">🎵</span>
           <audio src={msg.media_url} controls className="h-8 max-w-[200px]" preload="metadata" />
         </div>

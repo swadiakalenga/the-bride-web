@@ -224,7 +224,7 @@ export default function AdminPaymentsPage() {
 
                 {/* Stripe notice */}
                 {method === "stripe" && (
-                  <div className="rounded-xl bg-blue-50 px-3 py-2.5 text-xs text-blue-700">
+                  <div className="rounded-xl bg-brand-50 px-3 py-2.5 text-xs text-brand-700">
                     {t("pay_admin_stripe_note")}
                   </div>
                 )}

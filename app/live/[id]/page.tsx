@@ -550,7 +550,7 @@ export default function LivePage() {
         <div className="absolute bottom-24 left-0 right-0 max-h-48 overflow-y-auto px-4 space-y-1">
           {chatMessages.slice(-20).map((m, i) => (
             <div key={i} className="inline-flex max-w-[80%] rounded-2xl bg-black/50 px-3 py-1.5">
-              <span className="mr-1.5 text-xs font-bold text-blue-300">{m.sender}:</span>
+              <span className="mr-1.5 text-xs font-bold text-brand-300">{m.sender}:</span>
               <span className="text-xs text-white">{m.text}</span>
             </div>
           ))}

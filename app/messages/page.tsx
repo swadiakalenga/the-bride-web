@@ -316,7 +316,7 @@ export default function MessagesPage() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
       </div>
     );
   }
@@ -394,7 +394,7 @@ export default function MessagesPage() {
           <>
             {conversations.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 px-8 text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand-50">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
@@ -431,7 +431,7 @@ export default function MessagesPage() {
                             className="h-14 w-14 rounded-full object-cover"
                           />
                         ) : (
-                          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-xl font-bold text-white">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-xl font-bold text-white">
                             {avatarLetter(conv.other_user_name)}
                           </div>
                         )}
@@ -451,7 +451,7 @@ export default function MessagesPage() {
 
                       {/* Right side */}
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <p className={`text-xs ${hasUnread ? "font-semibold text-blue-500" : "text-gray-400"}`}>
+                        <p className={`text-xs ${hasUnread ? "font-semibold text-brand-500" : "text-gray-400"}`}>
                           {formatConvTime(conv.last_message_at)}
                         </p>
                         {conv.pending ? (
@@ -459,7 +459,7 @@ export default function MessagesPage() {
                             Pending
                           </span>
                         ) : hasUnread ? (
-                          <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-500 px-1.5 text-[11px] font-bold text-white">
+                          <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white">
                             {conv.unread_count}
                           </span>
                         ) : (
@@ -496,7 +496,7 @@ export default function MessagesPage() {
                       {req.sender_avatar ? (
                         <img src={req.sender_avatar} alt="" className="h-12 w-12 rounded-full object-cover flex-shrink-0" />
                       ) : (
-                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 font-bold text-white">
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 font-bold text-white">
                           {avatarLetter(req.sender_name)}
                         </div>
                       )}

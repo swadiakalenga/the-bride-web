@@ -171,7 +171,7 @@ export default function RightSidebar({ currentUserId, liveStreams }: Props) {
           <h3 className="text-sm font-bold text-gray-900">Suggested Churches</h3>
           <button
             onClick={() => router.push("/search")}
-            className="text-xs text-blue-500 hover:underline"
+            className="text-xs text-brand-500 hover:underline"
           >
             See all
           </button>
@@ -186,7 +186,7 @@ export default function RightSidebar({ currentUserId, liveStreams }: Props) {
                 onClick={() => router.push(`/church/${church.id}`)}
                 className="flex w-full items-center gap-2 text-left transition hover:opacity-80"
               >
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-500">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-bold text-brand-500">
                   {church.name.charAt(0).toUpperCase()}
                 </div>
                 <span className="flex-1 truncate text-sm font-medium text-gray-800">

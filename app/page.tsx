@@ -1,17 +1,24 @@
+import Image from "next/image";
 import Link from "next/link";
-import Logo from "./components/ui/Logo";
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-6 text-center">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-[#faf8f5] px-6 text-center">
       {/* Logo mark */}
-      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 to-blue-500 shadow-xl">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-        </svg>
+      <div className="mb-2 flex items-center justify-center">
+        <Image
+          src="/post-logo.jpeg"
+          alt="TheBride"
+          width={100}
+          height={100}
+          priority
+          className="rounded-3xl shadow-xl"
+        />
       </div>
 
-      <Logo size="lg" />
+      <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-gray-900">
+        The<span className="text-brand-600">Bride</span>
+      </h1>
 
       <p className="mt-4 max-w-sm text-base text-gray-500">
         A global community for believers — connect, worship, and grow together in faith.
@@ -20,7 +27,7 @@ export default function Home() {
       <div className="mt-8 flex flex-col gap-3 w-full max-w-xs">
         <Link
           href="/register"
-          className="rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-6 py-3 font-semibold text-white shadow-sm hover:from-amber-500 hover:to-amber-600 transition"
+          className="rounded-xl brand-gradient-bg px-6 py-3 font-semibold text-white shadow-md hover:opacity-90 transition"
         >
           Get Started
         </Link>

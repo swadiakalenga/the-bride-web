@@ -34,7 +34,7 @@ export default function Dashboard() {
       <div className="mt-6 flex gap-4">
   <button
     onClick={() => (window.location.href = "/profile")}
-    className="px-6 py-3 bg-blue-600 text-white rounded-lg"
+    className="px-6 py-3 bg-brand-600 text-white rounded-lg"
   >
     My Profile
   </button>

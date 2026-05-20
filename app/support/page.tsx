@@ -126,7 +126,7 @@ export default function SupportPage() {
           </>
         )}
         {m === "stripe" && (
-          <div className="rounded-lg bg-blue-50 px-3 py-2.5 text-xs text-blue-700">
+          <div className="rounded-lg bg-brand-50 px-3 py-2.5 text-xs text-brand-700">
             {t("pay_admin_stripe_note")}
           </div>
         )}

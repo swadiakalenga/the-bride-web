@@ -1,0 +1,30 @@
+{
+  "name": "TheBride",
+  "short_name": "TheBride",
+  "description": "A global community platform for churches and believers",
+  "start_url": "/feed",
+  "display": "standalone",
+  "background_color": "#faf8f5",
+  "theme_color": "#ff6a00",
+  "orientation": "portrait",
+  "categories": ["social", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

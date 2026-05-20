@@ -52,7 +52,7 @@ export default function AdminOverviewPage() {
 
   const statItems = stats
     ? [
-        { label: t("admin_stat_users"), value: stats.total_users, color: "text-blue-600" },
+        { label: t("admin_stat_users"), value: stats.total_users, color: "text-brand-600" },
         { label: t("admin_stat_churches"), value: stats.total_churches, color: "text-emerald-600" },
         { label: t("admin_stat_verif_pending"), value: stats.pending_verifications, color: "text-amber-600" },
         { label: t("admin_stat_posts"), value: stats.total_posts, color: "text-gray-900" },

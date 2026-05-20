@@ -143,7 +143,7 @@ export default function BottomNav({ unreadCount, onCompose }: BottomNavProps) {
               <button
                 key="compose"
                 onClick={onCompose}
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-blue-500 shadow-lg"
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-brand-500 shadow-lg"
                 aria-label="Create post"
               >
                 {tab.icon(false)}

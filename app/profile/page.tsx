@@ -426,7 +426,7 @@ export default function ProfilePage() {
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => router.push(`/church/${myChurch.id}/members`)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-50 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-50 py-2.5 text-sm font-semibold text-brand-700 hover:bg-brand-100"
                         >
                           👥 Members
                         </button>
@@ -477,13 +477,13 @@ export default function ProfilePage() {
                     {isChurchAdmin && myChurch?.email && (
                       <p>
                         <span className="font-semibold">Email:</span>{" "}
-                        <a href={`mailto:${myChurch.email}`} className="text-blue-500 hover:underline">{myChurch.email}</a>
+                        <a href={`mailto:${myChurch.email}`} className="text-brand-500 hover:underline">{myChurch.email}</a>
                       </p>
                     )}
                     {isChurchAdmin && myChurch?.phone && (
                       <p>
                         <span className="font-semibold">Phone:</span>{" "}
-                        <a href={`tel:${myChurch.phone}`} className="text-blue-500 hover:underline">{myChurch.phone}</a>
+                        <a href={`tel:${myChurch.phone}`} className="text-brand-500 hover:underline">{myChurch.phone}</a>
                       </p>
                     )}
                     <p><span className="font-semibold">Bio:</span> {isChurchAdmin ? (myChurch?.description || "—") : (profile.bio || "—")}</p>
@@ -509,7 +509,7 @@ export default function ProfilePage() {
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
-                        className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-2xl text-white shadow"
+                        className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-2xl text-white shadow"
                       >
                         +
                       </button>
@@ -637,7 +637,7 @@ export default function ProfilePage() {
                     <button
                       onClick={saveProfile}
                       disabled={saving}
-                      className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-medium text-white disabled:bg-blue-400"
+                      className="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white disabled:bg-brand-400"
                     >
                       {saving ? "…" : t("profile_save")}
                     </button>

@@ -325,7 +325,7 @@ export default function RegisterPage() {
             onClick={() => setAccountType("church")}
             className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition ${
               accountType === "church"
-                ? "bg-white text-blue-500 shadow-sm"
+                ? "bg-white text-brand-500 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >

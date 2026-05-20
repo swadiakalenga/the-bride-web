@@ -159,7 +159,7 @@ export default function TithePage() {
           </>
         )}
         {m === "stripe" && (
-          <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">{t("pay_admin_stripe_note")}</div>
+          <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">{t("pay_admin_stripe_note")}</div>
         )}
         {setting.instructions && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{setting.instructions}</p>

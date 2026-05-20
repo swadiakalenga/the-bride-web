@@ -446,7 +446,7 @@ export default function PostPage() {
                             [comment.id]: !prev[comment.id],
                           }))
                         }
-                        className="font-semibold text-blue-500 hover:text-blue-600"
+                        className="font-semibold text-brand-500 hover:text-brand-600"
                       >
                         Reply {replies.length > 0 ? `(${replies.length})` : ""}
                       </button>

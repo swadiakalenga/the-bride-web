@@ -97,7 +97,7 @@ export default function LeftSidebar({ myProfile, myAvatar, unreadCount, onCompos
             <p className="truncate font-semibold text-gray-900">{myName}</p>
             <span
               className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                isChurchAdmin ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"
+                isChurchAdmin ? "bg-brand-50 text-brand-600" : "bg-amber-50 text-amber-600"
               }`}
             >
               {isChurchAdmin ? t("profile_church_admin") : t("profile_member")}
