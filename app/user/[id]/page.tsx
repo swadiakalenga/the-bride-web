@@ -63,9 +63,69 @@ export default function UserProfilePage() {
   const [isLive, setIsLive] = useState(false);
   const [liveStreamId, setLiveStreamId] = useState<string | null>(null);
 
+  // Block / Mute / Report state
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState("harassment");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+
   useEffect(() => {
     if (userId) loadPage();
   }, [userId]);
+
+  useEffect(() => {
+    if (!currentUserId || !userId || currentUserId === userId) return;
+    supabase.rpc("get_relationship_status", { other_user_id: userId }).then(({ data }) => {
+      if (data) {
+        setIsBlocked(!!data.is_blocking);
+        setIsMuted(!!data.is_muting);
+      }
+    });
+  }, [currentUserId, userId]);
+
+  const toggleBlock = async () => {
+    if (!currentUserId || !profile) return;
+    if (isBlocked) {
+      await supabase.from("user_blocks").delete()
+        .eq("blocker_id", currentUserId).eq("blocked_id", profile.id);
+      setIsBlocked(false);
+    } else {
+      await supabase.from("user_blocks").insert([{ blocker_id: currentUserId, blocked_id: profile.id }]);
+      setIsBlocked(true);
+    }
+    setShowActionsMenu(false);
+  };
+
+  const toggleMute = async () => {
+    if (!currentUserId || !profile) return;
+    if (isMuted) {
+      await supabase.from("user_mutes").delete()
+        .eq("muter_id", currentUserId).eq("muted_id", profile.id);
+      setIsMuted(false);
+    } else {
+      await supabase.from("user_mutes").insert([{ muter_id: currentUserId, muted_id: profile.id }]);
+      setIsMuted(true);
+    }
+    setShowActionsMenu(false);
+  };
+
+  const submitReport = async () => {
+    if (!currentUserId || !profile) return;
+    setReportSubmitting(true);
+    await supabase.rpc("submit_report", {
+      p_target_type: "user",
+      p_target_id: profile.id,
+      p_reason: reportReason,
+      p_details: reportDetails || null,
+    });
+    setReportSubmitting(false);
+    setShowReportModal(false);
+    setReportDetails("");
+    setUiMessage("Report submitted.");
+  };
 
   async function loadPage() {
     setLoading(true);
@@ -419,12 +479,12 @@ export default function UserProfilePage() {
                   <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Church</p>
                   <button
                     onClick={() => router.push(`/church/${church.id}`)}
-                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-amber-50"
+                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-brand-50"
                   >
-                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 text-sm font-bold text-amber-600">
+                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-600">
                       {church.name.charAt(0).toUpperCase()}
                     </span>
-                    <span className="truncate text-sm font-medium text-amber-600">{church.name}</span>
+                    <span className="truncate text-sm font-medium text-brand-600">{church.name}</span>
                   </button>
                 </Card>
               )}
@@ -443,9 +503,9 @@ export default function UserProfilePage() {
             <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
               <div className="flex flex-col items-center">
                 {profile.avatar_url ? (
-                  <img src={profile.avatar_url} alt="Profile" className="h-28 w-28 rounded-full border-4 border-amber-100 object-cover" />
+                  <img src={profile.avatar_url} alt="Profile" className="h-28 w-28 rounded-full border-4 border-brand-100 object-cover" />
                 ) : (
-                  <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-amber-100 bg-gradient-to-br from-amber-200 to-amber-400 text-4xl font-bold text-white">
+                  <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-brand-100 brand-gradient-bg text-4xl font-bold text-white">
                     {avatarLetter}
                   </div>
                 )}
@@ -494,7 +554,7 @@ export default function UserProfilePage() {
                       className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition ${
                         isFollowing
                           ? "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                          : "bg-amber-400 text-white hover:bg-amber-500"
+                          : "bg-brand-600 text-white hover:bg-brand-700"
                       }`}
                     >
                       {isFollowing ? "Unfollow" : "Follow"}
@@ -507,6 +567,41 @@ export default function UserProfilePage() {
                     >
                       {messagingLoading ? "..." : pendingRequestExists ? "Request sent" : "Message"}
                     </button>
+
+                    {/* Block / Mute / Report overflow menu */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowActionsMenu((v) => !v)}
+                        className="flex h-[42px] w-10 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-500 hover:bg-gray-50"
+                        aria-label="More actions"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+                        </svg>
+                      </button>
+                      {showActionsMenu && (
+                        <div className="absolute right-0 top-12 z-30 w-44 rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                          <button
+                            onClick={toggleMute}
+                            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            {isMuted ? "Unmute" : "Mute"}
+                          </button>
+                          <button
+                            onClick={toggleBlock}
+                            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                          >
+                            {isBlocked ? "Unblock" : "Block"}
+                          </button>
+                          <button
+                            onClick={() => { setShowActionsMenu(false); setShowReportModal(true); }}
+                            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                          >
+                            Report
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -776,6 +871,66 @@ export default function UserProfilePage() {
           currentUserId={currentUserId}
           onClose={() => setFollowModal(null)}
         />
+      )}
+
+      {/* Report modal */}
+      {showReportModal && profile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="mb-1 text-lg font-bold text-gray-900">Report {profile.full_name}</h2>
+            <p className="mb-4 text-sm text-gray-500">Your report is anonymous and will be reviewed by our moderation team.</p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
+                <select
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                >
+                  {[
+                    ["harassment", "Harassment or bullying"],
+                    ["hate_speech", "Hate speech"],
+                    ["spam", "Spam or fake account"],
+                    ["misinformation", "Misinformation"],
+                    ["violence", "Violence or threats"],
+                    ["nudity", "Nudity or sexual content"],
+                    ["impersonation", "Impersonation"],
+                    ["other", "Other"],
+                  ].map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Details (optional)</label>
+                <textarea
+                  rows={3}
+                  value={reportDetails}
+                  onChange={(e) => setReportDetails(e.target.value)}
+                  placeholder="Describe the issue…"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                onClick={submitReport}
+                disabled={reportSubmitting}
+                className="w-full rounded-full bg-red-500 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:opacity-50"
+              >
+                {reportSubmitting ? "Submitting…" : "Submit Report"}
+              </button>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="w-full rounded-full border border-gray-200 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

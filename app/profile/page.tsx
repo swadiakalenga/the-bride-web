@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { validateUpload } from "../../lib/validateUpload";
 import { useLanguage } from "../../lib/useLanguage";
 import BottomNav from "../components/ui/BottomNav";
 import Card from "../components/ui/Card";
@@ -137,6 +138,12 @@ export default function ProfilePage() {
   }
 
   const uploadAvatar = async (file: File) => {
+    const validation = validateUpload(file, "avatar");
+    if (!validation.ok) {
+      setUiMessage(validation.message);
+      return;
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 

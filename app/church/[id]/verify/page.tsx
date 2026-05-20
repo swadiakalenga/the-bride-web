@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { useLanguage } from "../../../../lib/useLanguage";
+import { validateUpload } from "../../../../lib/validateUpload";
 
 type VerificationStatus = "unverified" | "pending" | "verified" | "rejected";
 
@@ -90,6 +91,13 @@ export default function ChurchVerifyPage() {
     e.preventDefault();
     setSaving(true);
     setUiMessage("");
+
+    // Validate document files before upload
+    for (const file of [regDocFile, pastorIdFile, addressProofFile]) {
+      if (!file) continue;
+      const r = validateUpload(file, "verification_doc");
+      if (!r.ok) { setUiMessage(r.message); setSaving(false); return; }
+    }
 
     try {
       let regDocUrl: string | undefined;

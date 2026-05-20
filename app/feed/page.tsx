@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { validateUpload } from "../../lib/validateUpload";
 import Card from "../components/ui/Card";
 import EmptyState from "../components/ui/EmptyState";
 import Spinner from "../components/ui/Spinner";
@@ -1974,16 +1975,25 @@ export default function Feed() {
         <input ref={fileInputRef} type="file" accept="image/*" multiple tabIndex={-1}
           onChange={(e) => {
             const files = Array.from(e.target.files || []);
+            e.target.value = "";
+            const invalid = files.find((f) => !validateUpload(f, "post_image").ok);
+            if (invalid) {
+              const r = validateUpload(invalid, "post_image");
+              setMediaError(!r.ok ? r.message : "");
+              return;
+            }
             setSelectedImages((prev) => [...prev, ...files]);
             setSelectedAudio(null); setSelectedVideo(null); setMediaError("");
-            e.target.value = "";
           }}
         />
         <input ref={audioInputRef} type="file" accept="audio/*" tabIndex={-1}
           onChange={(e) => {
             const file = e.target.files?.[0] || null;
-            setSelectedAudio(file); setSelectedImages([]); setSelectedVideo(null); setMediaError("");
             e.target.value = "";
+            if (!file) return;
+            const r = validateUpload(file, "post_audio");
+            if (!r.ok) { setMediaError(r.message); return; }
+            setSelectedAudio(file); setSelectedImages([]); setSelectedVideo(null); setMediaError("");
           }}
         />
         <input ref={videoInputRef} type="file" accept="video/*" tabIndex={-1}
@@ -1991,6 +2001,8 @@ export default function Feed() {
             const file = e.target.files?.[0] || null;
             e.target.value = "";
             if (!file) return;
+            const r = validateUpload(file, "post_video");
+            if (!r.ok) { setMediaError(r.message); return; }
             const valid = await validateVideoDuration(file);
             if (!valid) {
               const limit = myProfile?.role === "church_admin" ? "5 minutes" : "45 seconds";

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { validateUpload } from "../../../lib/validateUpload";
 import EmojiPicker from "../../components/ui/EmojiPicker";
 import type { ChatMessage } from "../../../lib/types";
 
@@ -388,6 +389,9 @@ export default function ChatPage() {
   const sendMediaMessage = async (file: File, type: "image" | "video" | "audio") => {
     const me = meRef.current;
     if (!me) return;
+
+    const r = validateUpload(file, "message_media");
+    if (!r.ok) { setUiMessage(r.message); return; }
 
     setUploading(true);
     setShowMediaMenu(false);
