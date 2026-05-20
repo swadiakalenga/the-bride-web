@@ -72,10 +72,64 @@
   --color-accent-700: var(--accent-700);
 }
 
+/* ─── Mobile: remove 300ms tap delay and WebKit highlight ───────────────── */
+html {
+  -webkit-tap-highlight-color: transparent;
+  /* prevent pull-to-refresh bouncing on Android WebView / Capacitor */
+  overscroll-behavior-y: none;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  /* GPU-composited scroll on iOS Safari */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Instant tap response on every interactive element */
+button, a, [role="button"], input[type="button"], input[type="submit"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+/* ─── Lightbox / modal fade-in ───────────────────────────────────────────── */
+@keyframes tb-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-tb-fade-in {
+  animation: tb-fade-in 0.18s ease-out both;
+}
+
+/* ─── Page/section entry animation ──────────────────────────────────────── */
+@keyframes tb-slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: tb-slide-up 0.22s ease-out both;
+}
+
+/* ─── Bottom sheet / modal slide-up ─────────────────────────────────────── */
+@keyframes tb-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.animate-sheet-up {
+  animation: tb-sheet-up 0.25s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* ─── Skeleton shimmer ───────────────────────────────────────────────────── */
+@keyframes tb-shimmer {
+  from { background-position: -400px 0; }
+  to   { background-position: 400px 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 800px 100%;
+  animation: tb-shimmer 1.6s infinite linear;
 }
 
 /* ─── Gradient utilities ─────────────────────────────────────────────────── */

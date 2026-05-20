@@ -6,6 +6,7 @@ import { supabase } from "../../../lib/supabase";
 import { validateUpload } from "../../../lib/validateUpload";
 import { useLanguage } from "../../../lib/useLanguage";
 import EmojiPicker from "../../components/ui/EmojiPicker";
+import ImageLightbox from "../../components/ui/ImageLightbox";
 import type { ChatMessage } from "../../../lib/types";
 
 type OtherUser = {
@@ -87,6 +88,7 @@ export default function ChatPage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [lightboxUrls, setLightboxUrls] = useState<string[]>([]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -491,7 +493,9 @@ export default function ChatPage() {
           alt="Shared photo"
           className="max-w-full rounded-xl object-cover cursor-pointer"
           style={{ maxHeight: "280px" }}
-          onClick={() => window.open(msg.media_url!, "_blank")}
+          loading="lazy"
+          decoding="async"
+          onClick={() => setLightboxUrls([msg.media_url!])}
         />
       );
     }
@@ -854,6 +858,16 @@ export default function ChatPage() {
         </div>
       </div>
       </div>
+
+      {lightboxUrls.length > 0 && (
+        <ImageLightbox
+          urls={lightboxUrls}
+          index={0}
+          onClose={() => setLightboxUrls([])}
+          onPrev={() => {}}
+          onNext={() => {}}
+        />
+      )}
     </div>
   );
 }

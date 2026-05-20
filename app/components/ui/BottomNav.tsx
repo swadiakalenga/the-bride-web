@@ -15,6 +15,15 @@ export default function BottomNav({ unreadCount, onCompose }: BottomNavProps) {
   const [selfCount, setSelfCount] = useState(0);
 
   // Auto-fetch and subscribe to real-time notification count
+  // Prefetch common routes so navigation feels instant
+  useEffect(() => {
+    router.prefetch("/feed");
+    router.prefetch("/messages");
+    router.prefetch("/notifications");
+    router.prefetch("/profile");
+    router.prefetch("/search");
+  }, [router]);
+
   useEffect(() => {
     if (unreadCount !== undefined) return;
 

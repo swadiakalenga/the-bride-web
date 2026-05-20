@@ -46,7 +46,7 @@ export default function ImageLightbox({ urls, index, onClose, onPrev, onNext }: 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+      className="animate-tb-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/90"
       onClick={onClose}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -82,13 +82,18 @@ export default function ImageLightbox({ urls, index, onClose, onPrev, onNext }: 
         </button>
       )}
 
+      {/* Preload adjacent images so swiping is instant */}
+      {hasMultiple && urls[index - 1] && <link rel="preload" as="image" href={urls[index - 1]} />}
+      {hasMultiple && urls[index + 1] && <link rel="preload" as="image" href={urls[index + 1]} />}
+
       {/* Image */}
       <img
         src={urls[index]}
         alt={`Image ${index + 1} of ${urls.length}`}
-        className="max-h-[90vh] max-w-[90vw] select-none rounded-lg object-contain shadow-2xl"
+        className="max-h-[90vh] max-w-[90vw] select-none rounded-lg object-contain shadow-2xl animate-tb-fade-in"
         onClick={(e) => e.stopPropagation()}
         draggable={false}
+        fetchPriority="high"
       />
 
       {/* Next */}

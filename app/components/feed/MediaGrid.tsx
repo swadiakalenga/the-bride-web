@@ -17,7 +17,7 @@ export default function MediaGrid({ urls }: MediaGridProps) {
   const prev = () => setLightboxIndex((cur) => (cur !== null ? (cur - 1 + urls.length) % urls.length : 0));
   const next = () => setLightboxIndex((cur) => (cur !== null ? (cur + 1) % urls.length : 0));
 
-  const imgClass = "cursor-pointer object-cover transition-opacity hover:opacity-90 active:opacity-75";
+  const imgClass = "cursor-pointer object-cover transition-opacity hover:opacity-90 active:opacity-75 select-none";
 
   return (
     <>
@@ -32,6 +32,8 @@ export default function MediaGrid({ urls }: MediaGridProps) {
             src={urls[0]}
             alt="Post image"
             className={`w-full rounded-lg border ${imgClass}`}
+            loading="lazy"
+            decoding="async"
           />
         </button>
       )}
@@ -44,6 +46,8 @@ export default function MediaGrid({ urls }: MediaGridProps) {
                 src={url}
                 alt={`Post image ${i + 1}`}
                 className={`aspect-square w-full ${imgClass}`}
+                loading="lazy"
+                decoding="async"
               />
             </button>
           ))}

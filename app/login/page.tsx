@@ -68,19 +68,24 @@ export default function LoginPage() {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-100"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
               required
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">{t("login_password")}</label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">{t("login_password")}</label>
+              <a href="/forgot-password" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                {t("forgot_link")}
+              </a>
+            </div>
             <input
               type="password"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-100"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
               required
             />
           </div>
@@ -88,7 +93,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-3 font-semibold text-white shadow-sm transition hover:from-amber-500 hover:to-amber-600 disabled:opacity-60"
+            className="w-full rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:from-brand-600 hover:to-brand-700 disabled:opacity-60"
           >
             {loading ? "…" : t("login_submit")}
           </button>
@@ -103,7 +108,7 @@ export default function LoginPage() {
 
       <p className="mt-6 text-sm text-gray-500">
         {t("login_no_account")}{" "}
-        <a href="/register" className="font-semibold text-amber-500 hover:text-amber-600">
+        <a href="/register" className="font-semibold text-brand-600 hover:text-brand-700">
           {t("login_register_link")}
         </a>
       </p>
