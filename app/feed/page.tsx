@@ -12,6 +12,7 @@ import Logo from "../components/ui/Logo";
 import BottomNav from "../components/ui/BottomNav";
 import LeftSidebar from "../components/feed/LeftSidebar";
 import RightSidebar from "../components/feed/RightSidebar";
+import MobileMenuDrawer from "../components/ui/MobileMenuDrawer";
 import EmojiPicker from "../components/ui/EmojiPicker";
 import type { Post, Comment, Profile } from "../../lib/types";
 import { checkContentGuidelines } from "../../lib/types";
@@ -39,6 +40,7 @@ export default function Feed() {
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
   const [showGoLive, setShowGoLive] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [liveStreams, setLiveStreams] = useState<{ id: string; title: string; church_name: string | null; church_avatar: string | null; viewer_count: number }[]>([]);
   const [myActiveStreamId, setMyActiveStreamId] = useState<string | null>(null);
   const [liveTitle, setLiveTitle] = useState("");
@@ -1281,6 +1283,19 @@ export default function Feed() {
                 <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
               </svg>
             </button>
+
+            {/* Mobile menu — hidden on desktop where sidebar is always visible */}
+            <button
+              onClick={() => setShowMobileMenu(true)}
+              className="lg:hidden flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+              aria-label="Menu"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -1993,6 +2008,12 @@ export default function Feed() {
           onCompose={() => setShowCompose(true)}
         />
       </div>
+
+      <MobileMenuDrawer
+        open={showMobileMenu}
+        onClose={() => setShowMobileMenu(false)}
+        myProfile={myProfile}
+      />
     </main>
   );
 }

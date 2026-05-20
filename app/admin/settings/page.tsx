@@ -41,6 +41,29 @@ export default function AdminSettingsPage() {
         ))}
       </section>
 
+      {/* DM privacy notice */}
+      <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm space-y-2">
+        <div className="flex items-center gap-2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600 shrink-0">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          <p className="font-semibold text-emerald-700">
+            {lang === "fr" ? "Messages privés protégés" : "Private messages are protected"}
+          </p>
+        </div>
+        <p className="text-emerald-700">
+          {lang === "fr"
+            ? "Les administrateurs de la plateforme ne peuvent pas lire les messages directs des utilisateurs. Les DMs sont accessibles uniquement aux participants de chaque conversation — cette restriction est appliquée au niveau de la base de données (RLS) et ne peut pas être contournée par l'interface admin."
+            : "Platform admins cannot read users' direct messages. DMs are accessible only to conversation participants — this restriction is enforced at the database level (RLS) and cannot be bypassed through the admin interface."}
+        </p>
+        <p className="text-xs text-emerald-600">
+          {lang === "fr"
+            ? "Le tableau de bord admin peut afficher le nombre total de messages à des fins statistiques, mais pas leur contenu."
+            : "The admin dashboard may show a total message count for statistics, but never message content."}
+        </p>
+      </section>
+
       {/* Platform admin note */}
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-700 space-y-1">
         <p className="font-semibold">Accès platform_admin</p>

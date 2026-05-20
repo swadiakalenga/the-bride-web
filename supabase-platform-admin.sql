@@ -87,7 +87,7 @@ begin
     'total_churches',          (select count(*) from public.churches),
     'pending_verifications',   (select count(*) from public.church_verifications where status = 'pending'),
     'total_posts',             (select count(*) from public.posts),
-    'total_messages',          (select count(*) from public.messages),
+    'total_messages',          (select count(*) from public.messages), -- COUNT only; message content is never exposed to admins
     'pending_reports',         (select count(*) from public.reports where status = 'pending'),
     'total_reports',           (select count(*) from public.reports)
   ) into v_result;
