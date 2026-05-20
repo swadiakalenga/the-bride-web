@@ -95,8 +95,6 @@ export default function ChatPage() {
     setOtherUser(null);
     setLoading(true);
 
-    console.log("[ChatPage] switching to conversation", conversationId);
-
     loadPage(() => mounted);
 
     return () => {
@@ -106,7 +104,6 @@ export default function ChatPage() {
   }, [conversationId]);
 
   useEffect(() => {
-    console.log("[ChatPage] messages state changed:", messages.length, messages.map((m) => m.id).join(", "));
     bottomRef.current?.scrollIntoView({ behavior: "instant" });
   }, [messages]);
 
@@ -139,8 +136,6 @@ export default function ChatPage() {
       .maybeSingle();
 
     if (!isMounted()) return;
-
-    console.log("[ChatPage] participation check for", convId, "→", participation);
 
     if (!participation) { router.push("/messages"); return; }
 
@@ -177,24 +172,13 @@ export default function ChatPage() {
   }
 
   const loadMessages = async (me: string, convId: string, isMounted: () => boolean) => {
-    console.log("[ChatPage] loadMessages querying conversation_id =", convId);
-
     const { data, error } = await supabase
       .from("messages")
       .select("*")
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
 
-    console.log(
-      "[ChatPage] loadMessages result: count =", data?.length,
-      "| error =", error?.message ?? "none",
-      "| convId =", convId,
-    );
-
-    if (!isMounted()) {
-      console.log("[ChatPage] loadMessages: isMounted=false, skipping setMessages (convId:", convId, ")");
-      return;
-    }
+    if (!isMounted()) return;
 
     if (error) {
       setLoadError(`Failed to load messages: ${error.message}`);
@@ -202,7 +186,6 @@ export default function ChatPage() {
     }
     setLoadError(null);
     setMessages(data || []);
-    console.log("[ChatPage] setMessages called with", (data || []).length, "rows for convId:", convId);
 
     // Mark all incoming unread messages as read, and stamp read_at if the
     // column exists (requires supabase-read-receipts.sql migration).
@@ -473,27 +456,13 @@ export default function ChatPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-white">
+      <div className="flex h-screen items-center justify-center bg-white">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-400 border-t-transparent" />
-        <div className="px-6 text-center font-mono text-[11px] text-yellow-700">
-          conv={conversationId?.slice(0, 8)} | me={currentUserId?.slice(0, 8) ?? "—"} | loading…
-          {loadError && <div className="mt-1 text-red-600">ERR: {loadError}</div>}
-        </div>
       </div>
     );
   }
 
   const otherName = otherUser?.full_name || "User";
-
-  // Temporary debug strip — always visible so it shows in beta/production too.
-  // Remove after confirming chat history loads reliably.
-  const debugBar = (
-    <div className="bg-yellow-50 px-4 py-1 text-[11px] text-yellow-700 font-mono leading-5">
-      conv={conversationId} | me={currentUserId?.slice(0, 8)} | msgs={messages.length}
-      {messages.length > 0 && ` | last="${messages[messages.length - 1].content?.slice(0, 25)}"`}
-      {loadError && <span className="ml-2 text-red-600">ERR: {loadError}</span>}
-    </div>
-  );
 
   const renderMediaContent = (msg: ChatMessage, isMe: boolean) => {
     if (!msg.media_url || !msg.media_type) return null;
@@ -634,8 +603,6 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {debugBar}
-
       {uiMessage && (
         <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-600">
           {uiMessage}
@@ -643,9 +610,10 @@ export default function ChatPage() {
       )}
 
       {/* ── Messages ── */}
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-2xl px-4 py-5">
         {loadError && (
-          <div className="mx-4 mt-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {loadError}
           </div>
         )}
@@ -677,14 +645,14 @@ export default function ChatPage() {
           return (
             <div key={msg.id}>
               {showDateSeparator && (
-                <div className="my-4 flex items-center gap-3">
+                <div className="my-6 flex items-center gap-3">
                   <div className="flex-1 border-t border-gray-200" />
-                  <span className="text-[11px] font-medium text-gray-400 bg-gray-50 px-2">{formatDateLabel(msg.created_at)}</span>
+                  <span className="rounded-full bg-gray-100 px-3 py-0.5 text-[11px] font-medium text-gray-400">{formatDateLabel(msg.created_at)}</span>
                   <div className="flex-1 border-t border-gray-200" />
                 </div>
               )}
 
-              <div className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} ${isLastInGroup ? "mb-3" : "mb-0.5"}`}>
+              <div className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} ${isLastInGroup ? "mb-4" : "mb-1"}`}>
                 {!isMe && (
                   <div className="w-8 flex-shrink-0">
                     {isLastInGroup && (
@@ -699,7 +667,7 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                <div className={`flex max-w-[70%] flex-col ${isMe ? "items-end" : "items-start"}`}>
+                <div className={`flex max-w-[75%] flex-col ${isMe ? "items-end" : "items-start"}`}>
                   {/* Media content */}
                   {hasMedia && (
                     <div className={`mb-1 overflow-hidden rounded-2xl ${msg.pending ? "opacity-60" : ""}`}>
@@ -710,18 +678,18 @@ export default function ChatPage() {
                   {/* Text bubble (skip if media-only with auto caption) */}
                   {(!hasMedia || (msg.content && !["Sent a photo", "Sent a video", "Sent an audio message"].includes(msg.content))) && (
                     <div
-                      className={`px-3.5 py-2 text-sm leading-relaxed ${
-                        isMe ? "bg-amber-400 text-white" : "bg-white text-gray-900 border border-gray-100"
+                      className={`break-words px-4 py-2.5 text-sm leading-relaxed ${
+                        isMe ? "bg-amber-400 text-white" : "bg-gray-100 text-gray-900"
                       } ${
                         isMe
                           ? isFirstInGroup && isLastInGroup ? "rounded-[20px]"
-                            : isFirstInGroup ? "rounded-[20px] rounded-br-[5px]"
-                            : isLastInGroup ? "rounded-[20px] rounded-tr-[5px]"
-                            : "rounded-[20px] rounded-r-[5px]"
+                            : isFirstInGroup ? "rounded-[20px] rounded-br-md"
+                            : isLastInGroup ? "rounded-[20px] rounded-tr-md"
+                            : "rounded-[20px] rounded-r-md"
                           : isFirstInGroup && isLastInGroup ? "rounded-[20px]"
-                            : isFirstInGroup ? "rounded-[20px] rounded-bl-[5px]"
-                            : isLastInGroup ? "rounded-[20px] rounded-tl-[5px]"
-                            : "rounded-[20px] rounded-l-[5px]"
+                            : isFirstInGroup ? "rounded-[20px] rounded-bl-md"
+                            : isLastInGroup ? "rounded-[20px] rounded-tl-md"
+                            : "rounded-[20px] rounded-l-md"
                       } ${msg.pending ? "opacity-60" : "opacity-100"}`}
                     >
                       {msg.content}
@@ -729,7 +697,7 @@ export default function ChatPage() {
                   )}
 
                   {isLastInGroup && (
-                    <div className={`mt-1 flex items-center gap-1 text-[10px] text-gray-400 ${isMe ? "flex-row-reverse" : ""}`}>
+                    <div className={`mt-1 flex items-center gap-1 text-[10px] text-gray-400 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                       <span>{formatTime(msg.created_at)}</span>
                       {isMe && !msg.pending && (
                         <span className={(msg.read_at ?? msg.is_read) ? "text-amber-500" : "text-gray-400"}>
@@ -745,6 +713,7 @@ export default function ChatPage() {
         })}
 
         <div ref={bottomRef} />
+        </div>
       </div>
 
       {/* Upload indicator */}
@@ -781,8 +750,8 @@ export default function ChatPage() {
       </div>
 
       {/* ── Input bar ── */}
-      <div className="border-t border-gray-200 bg-white px-3 py-2.5">
-        <div className="flex items-center gap-2">
+      <div className="border-t border-gray-200 bg-white pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex max-w-2xl items-center gap-2 px-3">
           {/* Media attachment button */}
           <div className="relative" data-chat-media-menu>
             <button
