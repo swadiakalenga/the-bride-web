@@ -44,7 +44,7 @@ export default function ChurchProfilePage() {
     // Church info
     const { data: churchData } = await supabase
       .from("churches")
-      .select("*")
+      .select("id, name, description, pastor_name, location, avatar_url, cover_url, email, phone, website, city, country, created_at")
       .eq("id", churchId)
       .maybeSingle();
 

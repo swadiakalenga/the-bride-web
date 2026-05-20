@@ -80,6 +80,9 @@ export default function ChatPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hasEarlierMessages, setHasEarlierMessages] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [earliestCreatedAt, setEarliestCreatedAt] = useState<string | null>(null);
   const [sidebarConversations, setSidebarConversations] = useState<SidebarConversation[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -187,12 +190,17 @@ export default function ChatPage() {
     setLoading(false);
   }
 
+  const MSG_PAGE = 50;
+  const MSG_COLS = "id, conversation_id, sender_id, content, media_url, media_type, created_at, is_read, read_at";
+
   const loadMessages = async (me: string, convId: string, isMounted: () => boolean) => {
+    // Load latest 50 messages (descending) then reverse for display.
     const { data, error } = await supabase
       .from("messages")
-      .select("*")
+      .select(MSG_COLS)
       .eq("conversation_id", convId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false })
+      .limit(MSG_PAGE);
 
     if (!isMounted()) return;
 
@@ -201,11 +209,11 @@ export default function ChatPage() {
       return;
     }
     setLoadError(null);
-    setMessages(data || []);
+    const reversed = (data || []).reverse() as ChatMessage[];
+    setMessages(reversed);
+    setHasEarlierMessages((data || []).length === MSG_PAGE);
+    if (reversed.length > 0) setEarliestCreatedAt(reversed[0].created_at);
 
-    // Mark all incoming unread messages as read, and stamp read_at if the
-    // column exists (requires supabase-read-receipts.sql migration).
-    // Errors here are silently dropped — they do not break the chat.
     supabase
       .from("messages")
       .update({ is_read: true, read_at: new Date().toISOString() })
@@ -215,87 +223,54 @@ export default function ChatPage() {
       .then(() => {});
   };
 
+  const loadEarlierMessages = async () => {
+    if (!earliestCreatedAt || !currentUserId || loadingEarlier) return;
+    setLoadingEarlier(true);
+
+    const { data } = await supabase
+      .from("messages")
+      .select(MSG_COLS)
+      .eq("conversation_id", conversationId)
+      .lt("created_at", earliestCreatedAt)
+      .order("created_at", { ascending: false })
+      .limit(MSG_PAGE);
+
+    const earlier = ((data || []).reverse()) as ChatMessage[];
+    setMessages((prev) => [...earlier, ...prev]);
+    setHasEarlierMessages(earlier.length === MSG_PAGE);
+    if (earlier.length > 0) setEarliestCreatedAt(earlier[0].created_at);
+    setLoadingEarlier(false);
+  };
+
   const loadSidebarConversations = async (me: string) => {
-    const { data: participations } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id")
-      .eq("user_id", me);
+    // Use the same RPC as messages/page.tsx to eliminate the N+1 loop.
+    const { data, error } = await supabase
+      .rpc("get_conversation_list", { p_user_id: me });
 
-    if (!participations || participations.length === 0) {
-      setSidebarConversations([]);
-      return;
-    }
+    if (error || !data) { setSidebarConversations([]); return; }
 
-    const conversationIds = participations.map((participant) => participant.conversation_id);
+    type RpcRow = {
+      conversation_id: string;
+      other_user_id: string;
+      other_user_name: string | null;
+      other_user_avatar: string | null;
+      last_message_content: string | null;
+      last_message_at: string | null;
+      last_sender_id: string | null;
+      unread_count: number;
+    };
 
-    const { data: allParticipants } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id, user_id")
-      .in("conversation_id", conversationIds)
-      .neq("user_id", me);
-
-    if (!allParticipants || allParticipants.length === 0) {
-      setSidebarConversations([]);
-      return;
-    }
-
-    const otherUserIds = [...new Set(allParticipants.map((participant) => participant.user_id))];
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", otherUserIds);
-
-    const profileMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
-    (profiles || []).forEach((profile) => {
-      profileMap[profile.id] = profile;
-    });
-
-    const rows: SidebarConversation[] = [];
-
-    for (const conversationIdValue of conversationIds) {
-      const otherParticipant = allParticipants.find(
-        (participant) => participant.conversation_id === conversationIdValue
-      );
-      if (!otherParticipant) continue;
-
-      const { data: lastMessages } = await supabase
-        .from("messages")
-        .select("content, created_at")
-        .eq("conversation_id", conversationIdValue)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const { count: unread } = await supabase
-        .from("messages")
-        .select("*", { count: "exact", head: true })
-        .eq("conversation_id", conversationIdValue)
-        .eq("is_read", false)
-        .neq("sender_id", me);
-
-      const lastMessage = lastMessages?.[0] || null;
-      const profile = profileMap[otherParticipant.user_id] || {
-        full_name: null,
-        avatar_url: null,
-      };
-
-      rows.push({
-        id: conversationIdValue,
-        other_user_id: otherParticipant.user_id,
-        other_user_name: profile.full_name,
-        other_user_avatar: profile.avatar_url,
-        last_message: lastMessage?.content || null,
-        last_message_at: lastMessage?.created_at || null,
-        unread_count: unread || 0,
-      });
-    }
-
-    rows.sort((a, b) => {
-      if (!a.last_message_at) return 1;
-      if (!b.last_message_at) return -1;
-      return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
-    });
-
-    setSidebarConversations(rows);
+    setSidebarConversations(
+      (data as RpcRow[]).map((row) => ({
+        id: row.conversation_id,
+        other_user_id: row.other_user_id,
+        other_user_name: row.other_user_name,
+        other_user_avatar: row.other_user_avatar,
+        last_message: row.last_message_content,
+        last_message_at: row.last_message_at,
+        unread_count: Number(row.unread_count),
+      })),
+    );
   };
 
   const subscribeToMessages = (me: string, convId: string) => {
@@ -633,6 +608,20 @@ export default function ChatPage() {
       {/* ── Messages ── */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-4 py-5">
+
+        {/* Load earlier messages */}
+        {hasEarlierMessages && (
+          <div className="mb-4 flex justify-center">
+            <button
+              onClick={loadEarlierMessages}
+              disabled={loadingEarlier}
+              className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-semibold text-gray-500 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+            >
+              {loadingEarlier ? "Loading…" : "Load earlier messages"}
+            </button>
+          </div>
+        )}
+
         {loadError && (
           <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {loadError}

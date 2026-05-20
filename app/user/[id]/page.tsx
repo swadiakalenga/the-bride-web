@@ -226,10 +226,12 @@ export default function UserProfilePage() {
     loadUserPosts(userId, me);
   }
 
+  const USER_POST_COLS = "id, user_id, church_id, content, media_urls, media_type, author_name, tagged_user_ids, created_at, updated_at";
+
   const loadUserPosts = async (ownerId: string, viewerId: string | null) => {
     const [{ data: ownPostsData }, { data: sharesData }] = await Promise.all([
-      supabase.from("posts").select("*").eq("user_id", ownerId).is("church_id", null).order("created_at", { ascending: false }),
-      supabase.from("post_shares").select("post_id").eq("user_id", ownerId).order("created_at", { ascending: false }),
+      supabase.from("posts").select(USER_POST_COLS).eq("user_id", ownerId).is("church_id", null).order("created_at", { ascending: false }).limit(15),
+      supabase.from("post_shares").select("post_id, created_at").eq("user_id", ownerId).order("created_at", { ascending: false }).limit(15),
     ]);
 
     const ownPosts = ownPostsData || [];
@@ -239,7 +241,7 @@ export default function UserProfilePage() {
     if (sharesData && sharesData.length > 0) {
       const { data: sharedData } = await supabase
         .from("posts")
-        .select("*")
+        .select(USER_POST_COLS)
         .in("id", sharesData.map((s) => s.post_id));
       sharedPostList = sharedData || [];
     }
@@ -292,6 +294,8 @@ export default function UserProfilePage() {
     setPostShareCounts((p) => ({ ...p, [postId]: Math.max(0, (p[postId] || 0) + (shared ? -1 : 1)) }));
     if (shared) {
       await supabase.from("post_shares").delete().eq("post_id", postId).eq("user_id", currentUserId);
+      // Remove from this user's shared posts display if viewing own profile
+      setUserSharedPosts((prev) => prev.filter((p) => p.id !== postId));
     } else {
       await supabase.from("post_shares").insert([{ post_id: postId, user_id: currentUserId }]);
     }

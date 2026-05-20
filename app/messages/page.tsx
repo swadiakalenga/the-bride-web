@@ -81,73 +81,39 @@ export default function MessagesPage() {
   }
 
   const loadConversations = async (me: string) => {
-    const { data: participations } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id")
-      .eq("user_id", me);
+    // Single RPC replaces the previous 2×N query loop (last message + unread
+    // count per conversation). Now O(1) round-trips regardless of conv count.
+    const { data: convData, error: rpcError } = await supabase
+      .rpc("get_conversation_list", { p_user_id: me });
 
-    if (!participations || participations.length === 0) {
+    if (rpcError) {
+      // RPC may not be deployed yet — fall back gracefully
       setConversations([]);
+      setPageError(`Could not load conversations: ${rpcError.message}. Run supabase-performance-rpcs.sql.`);
       return;
     }
 
-    const convIds = participations.map((p) => p.conversation_id);
+    type RpcRow = {
+      conversation_id: string;
+      other_user_id: string;
+      other_user_name: string | null;
+      other_user_avatar: string | null;
+      last_message_content: string | null;
+      last_message_at: string | null;
+      last_sender_id: string | null;
+      unread_count: number;
+    };
 
-    const { data: allParticipants } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id, user_id")
-      .in("conversation_id", convIds)
-      .neq("user_id", me);
-
-    if (!allParticipants || allParticipants.length === 0) {
-      setConversations([]);
-      return;
-    }
-
-    const otherUserIds = [...new Set(allParticipants.map((p) => p.user_id))];
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", otherUserIds);
-
-    const profileMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
-    (profiles || []).forEach((p) => { profileMap[p.id] = p; });
-
-    const rows: ConversationRow[] = [];
-
-    for (const convId of convIds) {
-      const otherParticipant = allParticipants.find((p) => p.conversation_id === convId);
-      if (!otherParticipant) continue;
-
-      const profile = profileMap[otherParticipant.user_id] || { full_name: null, avatar_url: null };
-
-      const { data: lastMsgs } = await supabase
-        .from("messages")
-        .select("content, created_at, is_read, sender_id")
-        .eq("conversation_id", convId)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const last = lastMsgs?.[0] || null;
-
-      const { count: unread } = await supabase
-        .from("messages")
-        .select("*", { count: "exact", head: true })
-        .eq("conversation_id", convId)
-        .eq("is_read", false)
-        .neq("sender_id", me);
-
-      rows.push({
-        id: convId,
-        other_user_id: otherParticipant.user_id,
-        other_user_name: profile.full_name,
-        other_user_avatar: profile.avatar_url,
-        last_message: last?.content || null,
-        last_message_at: last?.created_at || null,
-        last_sender_is_me: last?.sender_id === me,
-        unread_count: unread || 0,
-      });
-    }
+    const rows: ConversationRow[] = (convData as RpcRow[] || []).map((row) => ({
+      id: row.conversation_id,
+      other_user_id: row.other_user_id,
+      other_user_name: row.other_user_name,
+      other_user_avatar: row.other_user_avatar,
+      last_message: row.last_message_content,
+      last_message_at: row.last_message_at,
+      last_sender_is_me: row.last_sender_id === me,
+      unread_count: Number(row.unread_count),
+    }));
 
     // Also include message requests I've SENT that are still pending,
     // so the sender sees the conversation even before it's accepted.

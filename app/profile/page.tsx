@@ -133,7 +133,8 @@ export default function ProfilePage() {
       const { data: churchList } = await supabase
         .from("churches")
         .select("id, name, city, country")
-        .order("name", { ascending: true });
+        .order("name", { ascending: true })
+        .limit(200);
       setChurchOptions(churchList || []);
     }
 
@@ -149,10 +150,12 @@ export default function ProfilePage() {
     loadProfilePosts(userId);
   }
 
+  const POST_COLS = "id, user_id, church_id, content, media_urls, media_type, author_name, tagged_user_ids, created_at, updated_at";
+
   const loadProfilePosts = async (ownerId: string) => {
     const [{ data: ownPostsData }, { data: sharesData }] = await Promise.all([
-      supabase.from("posts").select("*").eq("user_id", ownerId).is("church_id", null).order("created_at", { ascending: false }),
-      supabase.from("post_shares").select("post_id").eq("user_id", ownerId).order("created_at", { ascending: false }),
+      supabase.from("posts").select(POST_COLS).eq("user_id", ownerId).is("church_id", null).order("created_at", { ascending: false }).limit(15),
+      supabase.from("post_shares").select("post_id, created_at").eq("user_id", ownerId).order("created_at", { ascending: false }).limit(15),
     ]);
 
     const ownPosts = ownPostsData || [];
@@ -162,7 +165,7 @@ export default function ProfilePage() {
     if (sharesData && sharesData.length > 0) {
       const { data: sharedData } = await supabase
         .from("posts")
-        .select("*")
+        .select(POST_COLS)
         .in("id", sharesData.map((s) => s.post_id));
       sharedPostList = sharedData || [];
     }
@@ -217,6 +220,8 @@ export default function ProfilePage() {
     setPostShareCounts((p) => ({ ...p, [postId]: Math.max(0, (p[postId] || 0) + (shared ? -1 : 1)) }));
     if (shared) {
       await supabase.from("post_shares").delete().eq("post_id", postId).eq("user_id", uid);
+      // Remove from sharedPosts display immediately
+      setSharedPosts((prev) => prev.filter((p) => p.id !== postId));
     } else {
       await supabase.from("post_shares").insert([{ post_id: postId, user_id: uid }]);
     }

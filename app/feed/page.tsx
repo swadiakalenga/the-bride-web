@@ -19,6 +19,7 @@ import ExpandableText from "../components/ui/ExpandableText";
 import { useLanguage } from "../../lib/useLanguage";
 import type { Post, Comment, Profile } from "../../lib/types";
 import { checkContentGuidelines } from "../../lib/types";
+import { compressBatch } from "../../lib/imageCompression";
 
 type CommentMap = Record<string, Comment[]>;
 type CommentInputMap = Record<string, string>;
@@ -60,6 +61,15 @@ export default function Feed() {
   const [myProfile, setMyProfile] = useState<Profile | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
+
+  // Pagination
+  const [feedPage, setFeedPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Posts shared by followed users (people feed only)
+  // Maps post_id → { userId, sharedAt } so we can show "Shared by [name]"
+  const [sharedByMap, setSharedByMap] = useState<Record<string, { userId: string; sharedAt: string }>>({});
 
   const [profilesById, setProfilesById] = useState<ProfileMap>({});
 
@@ -151,6 +161,25 @@ export default function Feed() {
     const interval = setInterval(() => loadLiveStreams(), 15000);
     return () => clearInterval(interval);
   }, [currentUserId, feedType, myProfile?.church_id]);
+
+  // Save scroll position when switching feed tabs or leaving the page
+  useEffect(() => {
+    return () => {
+      sessionStorage.setItem(`feed-scroll-${feedType}`, String(window.scrollY));
+    };
+  }, [feedType]);
+
+  // Restore scroll position after a fresh page-0 load
+  useEffect(() => {
+    if (!pageLoading && feedPage === 0) {
+      const key = `feed-scroll-${feedType}`;
+      const saved = sessionStorage.getItem(key);
+      if (saved) {
+        requestAnimationFrame(() => window.scrollTo({ top: Number(saved) }));
+        sessionStorage.removeItem(key);
+      }
+    }
+  }, [pageLoading, feedType, feedPage]);
 
   useEffect(() => {
     if (!currentUserId || posts.length === 0) return;
@@ -246,6 +275,9 @@ export default function Feed() {
     setProfilesById({});
     setCommentLikeCounts({});
     setCommentUserLikes({});
+    setSharedByMap({});
+    setFeedPage(0);
+    setHasMore(false);
   };
 
   const setErrorMessage = (message: string) => {
@@ -297,10 +329,14 @@ export default function Feed() {
     }
   }
 
-  const loadProfiles = async (postList: Post[], commentGroups?: CommentMap) => {
+  const FEED_PAGE_SIZE = 15;
+  const FEED_COLS = "id, user_id, church_id, content, media_urls, media_type, author_name, tagged_user_ids, created_at, updated_at";
+
+  const loadProfiles = async (postList: Post[], commentGroups?: CommentMap, extraUserIds?: string[], merge = false) => {
     const ids = new Set<string>();
 
     postList.forEach((post) => ids.add(post.user_id));
+    (extraUserIds || []).forEach((id) => ids.add(id));
 
     const commentMap = commentGroups || commentsByPost;
     Object.values(commentMap).forEach((comments) => {
@@ -308,7 +344,7 @@ export default function Feed() {
     });
 
     if (ids.size === 0) {
-      setProfilesById({});
+      if (!merge) setProfilesById({});
       return;
     }
 
@@ -327,16 +363,29 @@ export default function Feed() {
       map[profile.id] = profile;
     });
 
-    setProfilesById(map);
+    if (merge) {
+      setProfilesById((prev) => ({ ...prev, ...map }));
+    } else {
+      setProfilesById(map);
+    }
   };
 
-  async function loadPosts() {
+  async function loadPosts(page = 0) {
     if (!currentUserId) return;
 
-    setPageLoading(true);
-    setUiMessage("");
+    if (page === 0) {
+      setPageLoading(true);
+      setUiMessage("");
+    } else {
+      setLoadingMore(true);
+    }
+
+    const start = page * FEED_PAGE_SIZE;
+    const end = start + FEED_PAGE_SIZE - 1;
 
     let postList: Post[] = [];
+    let newSharedByMap: Record<string, { userId: string; sharedAt: string }> = {};
+    let sharerIds: string[] = [];
 
     if (feedType === "people") {
       const { data: followsData, error: followError } = await supabase
@@ -346,7 +395,7 @@ export default function Feed() {
 
       if (followError) {
         setErrorMessage(`Follow load failed: ${followError.message}`);
-        setPageLoading(false);
+        if (page === 0) setPageLoading(false); else setLoadingMore(false);
         return;
       }
 
@@ -355,18 +404,59 @@ export default function Feed() {
 
       const { data, error } = await supabase
         .from("posts")
-        .select("*")
+        .select(FEED_COLS)
         .in("user_id", allowedIds)
         .is("church_id", null)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(start, end);
 
       if (error) {
         setErrorMessage(`Load posts failed: ${error.message}`);
-        setPageLoading(false);
+        if (page === 0) setPageLoading(false); else setLoadingMore(false);
         return;
       }
 
       postList = data || [];
+
+      // Also fetch shares by followed users so shared content appears in feed
+      if (followingIds.length > 0 && page === 0) {
+        const existingPostIds = new Set(postList.map((p) => p.id));
+        const { data: sharedRefs } = await supabase
+          .from("post_shares")
+          .select("post_id, user_id, created_at")
+          .in("user_id", followingIds)
+          .order("created_at", { ascending: false })
+          .limit(FEED_PAGE_SIZE);
+
+        if (sharedRefs && sharedRefs.length > 0) {
+          const newSharedIds = sharedRefs
+            .map((s) => s.post_id)
+            .filter((id) => !existingPostIds.has(id));
+
+          if (newSharedIds.length > 0) {
+            const { data: sharedPostsData } = await supabase
+              .from("posts")
+              .select(FEED_COLS)
+              .in("id", newSharedIds);
+
+            (sharedPostsData || []).forEach((p) => postList.push(p));
+
+            sharedRefs.forEach((ref) => {
+              if (newSharedIds.includes(ref.post_id)) {
+                newSharedByMap[ref.post_id] = { userId: ref.user_id, sharedAt: ref.created_at };
+                sharerIds.push(ref.user_id);
+              }
+            });
+
+            // Sort unified list by recency (shared_at for reposts, created_at for own)
+            postList.sort((a, b) => {
+              const aTime = newSharedByMap[a.id]?.sharedAt || a.created_at;
+              const bTime = newSharedByMap[b.id]?.sharedAt || b.created_at;
+              return new Date(bTime).getTime() - new Date(aTime).getTime();
+            });
+          }
+        }
+      }
     } else {
       const { data: churchFollowData, error: churchFollowError } = await supabase
         .from("church_follows")
@@ -375,7 +465,7 @@ export default function Feed() {
 
       if (churchFollowError) {
         setErrorMessage(`Church follows load failed: ${churchFollowError.message}`);
-        setPageLoading(false);
+        if (page === 0) setPageLoading(false); else setLoadingMore(false);
         return;
       }
 
@@ -395,38 +485,50 @@ export default function Feed() {
 
       const { data, error } = await supabase
         .from("posts")
-        .select("*")
+        .select(FEED_COLS)
         .in("church_id", uniqueChurchIds)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(start, end);
 
       if (error) {
         setErrorMessage(`Load church posts failed: ${error.message}`);
-        setPageLoading(false);
+        if (page === 0) setPageLoading(false); else setLoadingMore(false);
         return;
       }
 
       postList = data || [];
     }
 
-    setPosts(postList);
+    const merge = page > 0;
 
-    const comments = await loadComments(postList);
+    setHasMore(postList.length >= FEED_PAGE_SIZE);
+    setFeedPage(page);
+
+    if (merge) {
+      setPosts((prev) => [...prev, ...postList]);
+      setSharedByMap((prev) => ({ ...prev, ...newSharedByMap }));
+    } else {
+      setPosts(postList);
+      setSharedByMap(newSharedByMap);
+    }
+
+    const comments = await loadComments(postList, merge);
 
     await Promise.all([
-      loadLikes(postList),
-      loadShares(postList),
-      loadProfiles(postList, comments),
+      loadLikes(postList, merge),
+      loadShares(postList, merge),
+      loadProfiles(postList, comments, sharerIds, merge),
       loadViewCounts(postList.map((p) => p.id)),
     ]);
-    setPageLoading(false);
+
+    if (page === 0) setPageLoading(false); else setLoadingMore(false);
   }
 
-  const loadLikes = async (postList: Post[]) => {
+  const loadLikes = async (postList: Post[], merge = false) => {
     const ids = postList.map((p) => p.id);
 
     if (ids.length === 0) {
-      setLikeCounts({});
-      setUserLikes({});
+      if (!merge) { setLikeCounts({}); setUserLikes({}); }
       return;
     }
 
@@ -448,15 +550,19 @@ export default function Feed() {
       if (l.user_id === currentUserId) userMap[l.post_id] = true;
     });
 
-    setLikeCounts(counts);
-    setUserLikes(userMap);
+    if (merge) {
+      setLikeCounts((prev) => ({ ...prev, ...counts }));
+      setUserLikes((prev) => ({ ...prev, ...userMap }));
+    } else {
+      setLikeCounts(counts);
+      setUserLikes(userMap);
+    }
   };
 
-  const loadShares = async (postList: Post[]) => {
+  const loadShares = async (postList: Post[], merge = false) => {
     const ids = postList.map((p) => p.id);
     if (ids.length === 0) {
-      setShareCounts({});
-      setUserShares({});
+      if (!merge) { setShareCounts({}); setUserShares({}); }
       return;
     }
     const { data } = await supabase
@@ -470,8 +576,13 @@ export default function Feed() {
       counts[s.post_id] = (counts[s.post_id] || 0) + 1;
       if (s.user_id === currentUserId) userMap[s.post_id] = true;
     });
-    setShareCounts(counts);
-    setUserShares(userMap);
+    if (merge) {
+      setShareCounts((prev) => ({ ...prev, ...counts }));
+      setUserShares((prev) => ({ ...prev, ...userMap }));
+    } else {
+      setShareCounts(counts);
+      setUserShares(userMap);
+    }
   };
 
   const toggleShare = async (postId: string) => {
@@ -505,13 +616,11 @@ export default function Feed() {
     }
   };
 
-  const loadComments = async (postList: Post[]) => {
+  const loadComments = async (postList: Post[], merge = false) => {
     const ids = postList.map((p) => p.id);
 
     if (ids.length === 0) {
-      setCommentsByPost({});
-      setCommentLikeCounts({});
-      setCommentUserLikes({});
+      if (!merge) { setCommentsByPost({}); setCommentLikeCounts({}); setCommentUserLikes({}); }
       return {};
     }
 
@@ -533,13 +642,16 @@ export default function Feed() {
       grouped[c.post_id].push(c);
     });
 
-    setCommentsByPost(grouped);
+    if (merge) {
+      setCommentsByPost((prev) => ({ ...prev, ...grouped }));
+    } else {
+      setCommentsByPost(grouped);
+    }
 
     const commentIds = (data || []).map((c) => c.id);
 
     if (commentIds.length === 0) {
-      setCommentLikeCounts({});
-      setCommentUserLikes({});
+      if (!merge) { setCommentLikeCounts({}); setCommentUserLikes({}); }
       return grouped;
     }
 
@@ -561,8 +673,13 @@ export default function Feed() {
       if (like.user_id === currentUserId) userMap[like.comment_id] = true;
     });
 
-    setCommentLikeCounts(counts);
-    setCommentUserLikes(userMap);
+    if (merge) {
+      setCommentLikeCounts((prev) => ({ ...prev, ...counts }));
+      setCommentUserLikes((prev) => ({ ...prev, ...userMap }));
+    } else {
+      setCommentLikeCounts(counts);
+      setCommentUserLikes(userMap);
+    }
 
     return grouped;
   };
@@ -1769,6 +1886,24 @@ export default function Feed() {
 
               return (
                 <Card key={post.id} data-post-id={post.id}>
+                  {sharedByMap[post.id] && (
+                    <div className="mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2 text-xs text-gray-500">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
+                        <polyline points="16 6 12 2 8 6" />
+                        <line x1="12" y1="2" x2="12" y2="15" />
+                      </svg>
+                      <span>
+                        Reshared by{" "}
+                        <button
+                          onClick={() => router.push(`/user/${sharedByMap[post.id].userId}`)}
+                          className="font-semibold hover:underline"
+                        >
+                          {profilesById[sharedByMap[post.id].userId]?.full_name ?? "Someone"}
+                        </button>
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-start gap-3">
                     {renderAvatar(post.user_id, post.author_name, "h-11 w-11")}
 
@@ -2048,6 +2183,18 @@ export default function Feed() {
             })}
           </div>
         )}
+
+        {!pageLoading && hasMore && (
+          <div className="mt-4 flex justify-center pb-4">
+            <button
+              onClick={() => loadPosts(feedPage + 1)}
+              disabled={loadingMore}
+              className="rounded-full border border-gray-200 bg-white px-6 py-2.5 text-sm font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          </div>
+        )}
         </section>
 
           {/* Right sidebar — desktop only */}
@@ -2063,7 +2210,7 @@ export default function Feed() {
       {/* File inputs — always in DOM, off-screen so mobile browsers allow .click() */}
       <div className="fixed -left-[9999px] -top-[9999px] opacity-0 pointer-events-none" aria-hidden="true">
         <input ref={fileInputRef} type="file" accept="image/*" multiple tabIndex={-1}
-          onChange={(e) => {
+          onChange={async (e) => {
             const files = Array.from(e.target.files || []);
             e.target.value = "";
             const invalid = files.find((f) => !validateUpload(f, "post_image").ok);
@@ -2072,8 +2219,14 @@ export default function Feed() {
               setMediaError(!r.ok ? r.message : "");
               return;
             }
-            setSelectedImages((prev) => [...prev, ...files]);
-            setSelectedAudio(null); setSelectedVideo(null); setMediaError("");
+            // Compress before storing (no upload yet — just the preview stage)
+            const { files: compressed, rejectedCount, rejectedReasons } = await compressBatch(files);
+            if (rejectedCount > 0) setMediaError(rejectedReasons[0]);
+            if (compressed.length > 0) {
+              setSelectedImages((prev) => [...prev, ...compressed]);
+              setSelectedAudio(null); setSelectedVideo(null);
+              if (rejectedCount === 0) setMediaError("");
+            }
           }}
         />
         <input ref={audioInputRef} type="file" accept="audio/*" tabIndex={-1}
