@@ -618,16 +618,18 @@ export default function ChatPage() {
           <button
             onClick={() => isBlocked ? handleBlock() : setShowBlockConfirm(true)}
             disabled={blockLoading}
-            title={isBlocked
-              ? (lang === "fr" ? "Débloquer" : "Unblock")
-              : (lang === "fr" ? "Bloquer" : "Block")}
-            className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:opacity-50 ${
-              isBlocked ? "text-amber-500 hover:bg-amber-50" : "text-gray-400 hover:bg-red-50 hover:text-red-500"
+            className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+              isBlocked
+                ? "bg-amber-50 text-amber-600 hover:bg-amber-100"
+                : "bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500"
             }`}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
             </svg>
+            {blockLoading ? "…" : isBlocked
+              ? (lang === "fr" ? "Débloquer" : "Unblock")
+              : (lang === "fr" ? "Bloquer" : "Block")}
           </button>
         </div>
       </div>

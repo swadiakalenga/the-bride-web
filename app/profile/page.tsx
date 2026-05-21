@@ -31,6 +31,11 @@ type Church = {
   description: string | null;
   email: string | null;
   phone: string | null;
+  physical_address: string | null;
+  address_line2: string | null;
+  state_region: string | null;
+  postal_code: string | null;
+  public_address: boolean | null;
 };
 
 type ChurchOption = {
@@ -67,6 +72,10 @@ export default function ProfilePage() {
   const [pastorName, setPastorName] = useState("");
   const [churchEmail, setChurchEmail] = useState("");
   const [churchPhone, setChurchPhone] = useState("");
+  const [physicalAddress, setPhysicalAddress] = useState("");
+  const [addressLine2, setAddressLine2] = useState("");
+  const [stateRegion, setStateRegion] = useState("");
+  const [postalCode, setPostalCode] = useState("");
 
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
@@ -115,12 +124,12 @@ export default function ProfilePage() {
     if (data.role === "church_admin" && data.church_id) {
       const { data: churchData } = await supabase
         .from("churches")
-        .select("id, name, city, country, pastor_name, description, email, phone")
+        .select("id, name, city, country, pastor_name, description, email, phone, physical_address, address_line2, state_region, postal_code, public_address")
         .eq("id", data.church_id)
         .maybeSingle();
 
       if (churchData) {
-        setMyChurch(churchData);
+        setMyChurch(churchData as Church);
         setChurchName(churchData.name || "");
         setPastorName(churchData.pastor_name || "");
         setChurchEmail(churchData.email || "");
@@ -128,6 +137,10 @@ export default function ProfilePage() {
         setCity(churchData.city || "");
         setCountry(churchData.country || "");
         setBio(churchData.description || "");
+        setPhysicalAddress(churchData.physical_address || "");
+        setAddressLine2(churchData.address_line2 || "");
+        setStateRegion(churchData.state_region || "");
+        setPostalCode(churchData.postal_code || "");
       }
     } else {
       const { data: churchList } = await supabase
@@ -288,6 +301,10 @@ export default function ProfilePage() {
           city: city.trim() || null,
           country: country.trim() || null,
           description: bio.trim() || null,
+          physical_address: physicalAddress.trim() || null,
+          address_line2: addressLine2.trim() || null,
+          state_region: stateRegion.trim() || null,
+          postal_code: postalCode.trim() || null,
         }).eq("id", myChurch.id),
         supabase.from("profiles").update({
           full_name: churchName.trim(),
@@ -332,6 +349,10 @@ export default function ProfilePage() {
       setCity(myChurch.city || "");
       setCountry(myChurch.country || "");
       setBio(myChurch.description || "");
+      setPhysicalAddress(myChurch.physical_address || "");
+      setAddressLine2(myChurch.address_line2 || "");
+      setStateRegion(myChurch.state_region || "");
+      setPostalCode(myChurch.postal_code || "");
     } else {
       setFullName(profile?.full_name || "");
       setCity(profile?.city || "");
@@ -505,6 +526,7 @@ export default function ProfilePage() {
                     )}
                   </div>
 
+                  {/* Followers / Following — church admins only show followers */}
                   <div className="mt-6 flex items-center justify-center gap-8 rounded-xl bg-gray-50 p-4">
                     <button
                       onClick={() => setFollowModal("followers")}
@@ -513,79 +535,93 @@ export default function ProfilePage() {
                       <p className="text-2xl font-bold">{followersCount}</p>
                       <p className="text-sm text-gray-500">{t("profile_followers")}</p>
                     </button>
-                    <button
-                      onClick={() => setFollowModal("following")}
-                      className="text-center hover:opacity-75 transition-opacity"
-                    >
-                      <p className="text-2xl font-bold">{followingCount}</p>
-                      <p className="text-sm text-gray-500">{t("profile_following")}</p>
-                    </button>
+                    {!isChurchAdmin && (
+                      <button
+                        onClick={() => setFollowModal("following")}
+                        className="text-center hover:opacity-75 transition-opacity"
+                      >
+                        <p className="text-2xl font-bold">{followingCount}</p>
+                        <p className="text-sm text-gray-500">{t("profile_following")}</p>
+                      </button>
+                    )}
                   </div>
 
                   <button
                     onClick={() => setIsEditing(true)}
                     className="mt-4 w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    {t("profile_edit")}
+                    {isChurchAdmin
+                      ? (lang === "fr" ? "Modifier l'église" : "Edit church info")
+                      : t("profile_edit")}
                   </button>
 
-                  {/* Payment Methods shortcut */}
-                  <button
-                    onClick={() => router.push("/settings/payment-methods")}
-                    className="mt-2 flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    <span className="flex items-center gap-2">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                  {/* Personal account Payment Methods shortcut — NOT shown for church admins (shown in church settings below) */}
+                  {!isChurchAdmin && (
+                    <button
+                      onClick={() => router.push("/settings/payment-methods")}
+                      className="mt-2 flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      <span className="flex items-center gap-2">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                        </svg>
+                        {lang === "fr" ? "Moyens de paiement" : "Payment Methods"}
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                        <polyline points="9 18 15 12 9 6" />
                       </svg>
-                      {lang === "fr" ? "Moyens de paiement" : "Payment Methods"}
-                    </span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </button>
+                    </button>
+                  )}
 
-                  {/* Church profile link */}
+                  {/* ── Church admin shortcuts ── */}
                   {isChurchAdmin && myChurch && (
                     <div className="mt-3 space-y-2">
                       <button
                         onClick={() => router.push(`/church/${myChurch.id}`)}
                         className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-amber-50 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"
                       >
-                        ⛪ View Church Profile
+                        ⛪ {lang === "fr" ? "Voir le profil" : "View Church Profile"}
                       </button>
+
+                      {/* Church settings grid */}
                       <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => router.push(`/church/${myChurch.id}/members`)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-50 py-2.5 text-sm font-semibold text-brand-700 hover:bg-brand-100"
-                        >
-                          👥 Members
+                        <button onClick={() => router.push(`/church/${myChurch.id}/members`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-50 py-2.5 text-sm font-semibold text-brand-700 hover:bg-brand-100">
+                          👥 {lang === "fr" ? "Membres" : "Members"}
                         </button>
-                        <button
-                          onClick={() => router.push(`/church/${myChurch.id}/tithe`)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
-                        >
-                          💝 Tithing
+                        <button onClick={() => router.push(`/church/${myChurch.id}/tithe`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
+                          💝 {lang === "fr" ? "Dons" : "Giving"}
                         </button>
-                        <button
-                          onClick={() => router.push(`/church/${myChurch.id}/prayers`)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-50 py-2.5 text-sm font-semibold text-purple-700 hover:bg-purple-100"
-                        >
-                          🙏 Prayer Wall
+                        <button onClick={() => router.push(`/church/${myChurch.id}/events`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100">
+                          📅 {lang === "fr" ? "Événements" : "Events"}
                         </button>
-                        <button
-                          onClick={() => router.push(`/church/${myChurch.id}/events`)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100"
-                        >
-                          📅 Events
+                        <button onClick={() => router.push(`/church/${myChurch.id}/prayers`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-50 py-2.5 text-sm font-semibold text-purple-700 hover:bg-purple-100">
+                          🙏 {lang === "fr" ? "Prières" : "Prayer Wall"}
                         </button>
-                        <button
-                          onClick={() => router.push(`/church/${myChurch.id}/devotionals`)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl bg-teal-50 py-2.5 text-sm font-semibold text-teal-700 hover:bg-teal-100 col-span-2"
-                        >
-                          📖 Devotionals
+                        <button onClick={() => router.push(`/church/${myChurch.id}/verify`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-50 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100">
+                          ✅ {lang === "fr" ? "Vérification" : "Verification"}
+                        </button>
+                        <button onClick={() => router.push(`/church/${myChurch.id}/payouts`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-teal-50 py-2.5 text-sm font-semibold text-teal-700 hover:bg-teal-100">
+                          💳 {lang === "fr" ? "Versements" : "Payout setup"}
+                        </button>
+                        <button onClick={() => router.push(`/church/${myChurch.id}/devotionals`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 col-span-2">
+                          📖 {lang === "fr" ? "Dévotions" : "Devotionals"}
                         </button>
                       </div>
+
+                      {/* Logout */}
+                      <button
+                        onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
+                        className="mt-1 w-full rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-500 hover:bg-gray-50"
+                      >
+                        {lang === "fr" ? "Se déconnecter" : "Log out"}
+                      </button>
                     </div>
                   )}
 
@@ -695,6 +731,50 @@ export default function ProfilePage() {
                             onChange={(e) => setChurchPhone(e.target.value)}
                             className="w-full rounded-lg border px-3 py-2"
                             placeholder="+1 234 567 8900"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">
+                            {lang === "fr" ? "Adresse physique" : "Physical address"}
+                          </label>
+                          <input
+                            value={physicalAddress}
+                            onChange={(e) => setPhysicalAddress(e.target.value)}
+                            className="w-full rounded-lg border px-3 py-2"
+                            placeholder={lang === "fr" ? "Rue, numéro…" : "Street address…"}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="mb-1 block text-sm font-medium text-gray-700">
+                              {lang === "fr" ? "Complément d'adresse" : "Address line 2"}
+                            </label>
+                            <input
+                              value={addressLine2}
+                              onChange={(e) => setAddressLine2(e.target.value)}
+                              className="w-full rounded-lg border px-3 py-2"
+                              placeholder={lang === "fr" ? "Apt, bâtiment…" : "Apt, suite…"}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-sm font-medium text-gray-700">
+                              {lang === "fr" ? "Province/Région" : "State / Region"}
+                            </label>
+                            <input
+                              value={stateRegion}
+                              onChange={(e) => setStateRegion(e.target.value)}
+                              className="w-full rounded-lg border px-3 py-2"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">
+                            {lang === "fr" ? "Code postal" : "Postal code"}
+                          </label>
+                          <input
+                            value={postalCode}
+                            onChange={(e) => setPostalCode(e.target.value)}
+                            className="w-full rounded-lg border px-3 py-2"
                           />
                         </div>
                       </>
@@ -834,18 +914,20 @@ export default function ProfilePage() {
           <aside className="hidden lg:block lg:col-span-3">
             <div className="sticky top-[72px] space-y-3">
 
-              {/* Stats */}
+              {/* Stats — church admins only show followers */}
               <Card>
                 <p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-500">Stats</p>
                 <div className="flex gap-2">
                   <div className="flex-1 rounded-xl bg-gray-50 p-3 text-center">
                     <p className="text-2xl font-bold text-gray-900">{followersCount}</p>
-                    <p className="text-xs text-gray-500">Followers</p>
+                    <p className="text-xs text-gray-500">{lang === "fr" ? "Abonnés" : "Followers"}</p>
                   </div>
-                  <div className="flex-1 rounded-xl bg-gray-50 p-3 text-center">
-                    <p className="text-2xl font-bold text-gray-900">{followingCount}</p>
-                    <p className="text-xs text-gray-500">Following</p>
-                  </div>
+                  {!isChurchAdmin && (
+                    <div className="flex-1 rounded-xl bg-gray-50 p-3 text-center">
+                      <p className="text-2xl font-bold text-gray-900">{followingCount}</p>
+                      <p className="text-xs text-gray-500">{lang === "fr" ? "Abonnements" : "Following"}</p>
+                    </div>
+                  )}
                 </div>
               </Card>
 
@@ -885,35 +967,39 @@ export default function ProfilePage() {
               {/* Church admin: tithe summary shortcut */}
               {isChurchAdmin && myChurch && (
                 <Card>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Quick Links</p>
-                  <button
-                    onClick={() => router.push(`/church/${myChurch.id}/tithe`)}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-                  >
-                    💝 Tithe Records
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+                    {lang === "fr" ? "Gestion de l'église" : "Church settings"}
+                  </p>
+                  <button onClick={() => router.push(`/church/${myChurch.id}/tithe`)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">
+                    💝 {lang === "fr" ? "Dons" : "Tithe Records"}
+                  </button>
+                  <button onClick={() => router.push(`/church/${myChurch.id}/events`)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50">
+                    📅 {lang === "fr" ? "Événements" : "Manage Events"}
+                  </button>
+                  <button onClick={() => router.push(`/church/${myChurch.id}/devotionals`)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50">
+                    📖 {lang === "fr" ? "Dévotions" : "Post Devotional"}
+                  </button>
+                  <button onClick={() => router.push(`/church/${myChurch.id}/verify`)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                    ✅ {lang === "fr" ? "Vérification d'adresse" : "Location Verification"}
+                  </button>
+                  <button onClick={() => router.push(`/church/${myChurch.id}/payouts`)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50">
+                    💳 {lang === "fr" ? "Configuration des versements" : "Payout setup"}
                   </button>
                   <button
-                    onClick={() => router.push(`/church/${myChurch.id}/events`)}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50"
+                    onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50"
                   >
-                    📅 Manage Events
-                  </button>
-                  <button
-                    onClick={() => router.push(`/church/${myChurch.id}/devotionals`)}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50"
-                  >
-                    📖 Post Devotional
-                  </button>
-                  <button
-                    onClick={() => router.push("/settings/payment-methods")}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
-                  >
-                    💳 {lang === "fr" ? "Moyens de paiement" : "Payment Methods"}
+                    ← {lang === "fr" ? "Se déconnecter" : "Log out"}
                   </button>
                 </Card>
               )}
 
-              {/* Non-admin: account shortcuts */}
+              {/* Non-admin: account shortcuts (one Payment Methods button only) */}
               {!isChurchAdmin && (
                 <Card>
                   <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">

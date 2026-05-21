@@ -25,6 +25,8 @@ export default function ChurchEventsPage() {
   const [eventTime, setEventTime] = useState("");
   const [location, setLocation] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     loadPage();
@@ -32,6 +34,7 @@ export default function ChurchEventsPage() {
 
   async function loadPage() {
     setLoading(true);
+    setLoadError("");
     const { data: authData } = await supabase.auth.getUser();
     const me = authData.user?.id;
     if (!me) { router.push("/login"); return; }
@@ -51,11 +54,17 @@ export default function ChurchEventsPage() {
       .maybeSingle();
     setIsAdmin(profile?.role === "church_admin" && profile?.church_id === churchId);
 
-    const { data: eventsData } = await supabase
+    const { data: eventsData, error: eventsError } = await supabase
       .from("church_events")
       .select("*")
       .eq("church_id", churchId)
       .order("event_date", { ascending: true });
+
+    if (eventsError) {
+      setLoadError(eventsError.message);
+      setLoading(false);
+      return;
+    }
 
     if (eventsData && eventsData.length > 0) {
       const eventIds = eventsData.map((e) => e.id);
@@ -104,12 +113,13 @@ export default function ChurchEventsPage() {
   const submitEvent = async () => {
     if (!currentUserId || !title.trim() || !eventDate) return;
     setSubmitting(true);
+    setFormError("");
 
     const dateTime = eventTime
       ? `${eventDate}T${eventTime}:00`
       : `${eventDate}T00:00:00`;
 
-    await supabase.from("church_events").insert([{
+    const { error: insertError } = await supabase.from("church_events").insert([{
       church_id: churchId,
       title: title.trim(),
       description: description.trim() || null,
@@ -118,13 +128,19 @@ export default function ChurchEventsPage() {
       created_by: currentUserId,
     }]);
 
+    setSubmitting(false);
+
+    if (insertError) {
+      setFormError(insertError.message);
+      return;
+    }
+
     setTitle("");
     setDescription("");
     setEventDate("");
     setEventTime("");
     setLocation("");
     setShowForm(false);
-    setSubmitting(false);
     loadPage();
   };
 
@@ -260,6 +276,9 @@ export default function ChurchEventsPage() {
                 placeholder="Location (optional)"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-amber-300 focus:bg-white"
               />
+              {formError && (
+                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{formError}</p>
+              )}
               <button
                 onClick={submitEvent}
                 disabled={submitting || !title.trim() || !eventDate}
@@ -268,6 +287,12 @@ export default function ChurchEventsPage() {
                 {submitting ? "Creating..." : "Create Event"}
               </button>
             </div>
+          </div>
+        )}
+
+        {loadError && (
+          <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
+            {loadError}
           </div>
         )}
 

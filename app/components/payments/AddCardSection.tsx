@@ -85,10 +85,14 @@ function InnerForm({ onSuccess, onCancel, lang }: Props) {
 
     const { error: stripeErr, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
       payment_method: { card: cardElement },
+      return_url: window.location.href,
     });
 
     if (stripeErr) {
-      setError(stripeErr.message ?? "Card setup failed");
+      // Show code + message so admins can debug (e.g. "do_not_honor", "card_declined")
+      const codePart = stripeErr.code ? ` [${stripeErr.code}]` : "";
+      const declinePart = stripeErr.decline_code ? ` (${stripeErr.decline_code})` : "";
+      setError((stripeErr.message ?? "Card setup failed") + codePart + declinePart);
       setSaving(false);
       return;
     }
