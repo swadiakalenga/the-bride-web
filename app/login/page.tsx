@@ -102,7 +102,7 @@ export default function LoginPage() {
   // ── Email OTP — verify code ───────────────────────────────────────────────
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code.trim()) return;
+    if (!/^\d{6,8}$/.test(code)) return;
     setMessage("");
     setLoading(true);
 
@@ -260,7 +260,7 @@ export default function LoginPage() {
                 )}
               </form>
             ) : (
-              /* Step 2 — enter the 6-digit code */
+              /* Step 2 — enter the verification code */
               <form onSubmit={handleVerifyCode} className="space-y-4">
                 <div className="rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">
                   {t("login_code_sent")}
@@ -270,8 +270,8 @@ export default function LoginPage() {
                 {/* Template setup note — shown if email arrived as a link instead of code */}
                 <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-800">
                   {lang === "fr"
-                    ? "Si vous avez reçu un lien plutôt qu'un code à 6 chiffres, le modèle d'e-mail Supabase doit être mis à jour. Contactez votre administrateur."
-                    : "If you received a link instead of a 6-digit code, the Supabase email template needs updating. Contact your administrator."}
+                    ? "Si vous avez reçu un lien plutôt qu'un code de vérification, le modèle d'e-mail Supabase doit être mis à jour. Contactez votre administrateur."
+                    : "If you received a link instead of a verification code, the Supabase email template needs updating. Contact your administrator."}
                 </div>
 
                 <div>
@@ -281,11 +281,11 @@ export default function LoginPage() {
                   <input
                     type="text"
                     inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    placeholder="000000"
+                    pattern="[0-9]{6,8}"
+                    maxLength={8}
+                    placeholder="00000000"
                     value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").trimStart())}
                     required
                     autoFocus
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] outline-none transition focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
@@ -294,7 +294,7 @@ export default function LoginPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || code.length < 6}
+                  disabled={loading || !/^\d{6,8}$/.test(code)}
                   className="w-full rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:from-brand-600 hover:to-brand-700 disabled:opacity-60"
                 >
                   {loading ? t("login_verifying") : t("login_verify_code")}
