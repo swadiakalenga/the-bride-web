@@ -529,6 +529,22 @@ export default function ProfilePage() {
                     {t("profile_edit")}
                   </button>
 
+                  {/* Payment Methods shortcut */}
+                  <button
+                    onClick={() => router.push("/settings/payment-methods")}
+                    className="mt-2 flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <span className="flex items-center gap-2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                      </svg>
+                      {lang === "fr" ? "Moyens de paiement" : "Payment Methods"}
+                    </span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+
                   {/* Church profile link */}
                   {isChurchAdmin && myChurch && (
                     <div className="mt-3 space-y-2">
@@ -887,6 +903,33 @@ export default function ProfilePage() {
                     className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50"
                   >
                     📖 Post Devotional
+                  </button>
+                  <button
+                    onClick={() => router.push("/settings/payment-methods")}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
+                  >
+                    💳 {lang === "fr" ? "Moyens de paiement" : "Payment Methods"}
+                  </button>
+                </Card>
+              )}
+
+              {/* Non-admin: account shortcuts */}
+              {!isChurchAdmin && (
+                <Card>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+                    {lang === "fr" ? "Mon compte" : "My Account"}
+                  </p>
+                  <button
+                    onClick={() => router.push("/settings/payment-methods")}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
+                  >
+                    💳 {lang === "fr" ? "Moyens de paiement" : "Payment Methods"}
+                  </button>
+                  <button
+                    onClick={() => router.push("/settings")}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    ⚙️ {lang === "fr" ? "Paramètres" : "Settings"}
                   </button>
                 </Card>
               )}

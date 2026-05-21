@@ -254,6 +254,25 @@ export default function MobileMenuDrawer({ open, onClose, myProfile }: Props) {
                 </div>
               </div>
 
+              {/* Payment Methods */}
+              <div className="border-t border-gray-100 px-3 py-2">
+                <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  {lang === "fr" ? "Paiements" : "Payments"}
+                </p>
+                <button
+                  onClick={() => navigate("/settings/payment-methods")}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-500">
+                      <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                    </svg>
+                    {lang === "fr" ? "Moyens de paiement" : "Payment Methods"}
+                  </span>
+                  <ChevronRight />
+                </button>
+              </div>
+
               {/* Legal links */}
               <div className="border-t border-gray-100 px-3 py-2">
                 <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
