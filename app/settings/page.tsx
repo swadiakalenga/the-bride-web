@@ -11,7 +11,8 @@ const fr = {
     {
       heading: "Compte",
       items: [
-        { href: "/settings/account", label: "Compte et suppression", desc: "Gérer et supprimer votre compte", danger: true },
+        { href: "/settings/account",          label: "Compte et suppression",   desc: "Gérer et supprimer votre compte", danger: true },
+        { href: "/settings/payment-methods",  label: "Moyens de paiement",      desc: "Gérer vos cartes enregistrées" },
       ],
     },
     {
@@ -33,7 +34,8 @@ const en = {
     {
       heading: "Account",
       items: [
-        { href: "/settings/account", label: "Account & Deletion", desc: "Manage and delete your account", danger: true },
+        { href: "/settings/account",          label: "Account & Deletion",  desc: "Manage and delete your account", danger: true },
+        { href: "/settings/payment-methods",  label: "Payment Methods",     desc: "Manage your saved cards" },
       ],
     },
     {
