@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { supabase } from "../../lib/supabase";
 import { useLanguage } from "../../lib/useLanguage";
+
+const PayPalButton = dynamic(() => import("../components/payments/PayPalButton"), { ssr: false });
 
 type PaymentSetting = {
   id: string;
@@ -31,9 +34,16 @@ export default function SupportPage() {
   const [currency, setCurrency]         = useState("USD");
   const [reference, setReference]       = useState("");
   const [note, setNote]                 = useState("");
-  const [submitting, setSubmitting]     = useState(false);
-  const [success, setSuccess]           = useState(false);
-  const [formError, setFormError]       = useState("");
+  const [submitting, setSubmitting]       = useState(false);
+  const [success, setSuccess]             = useState(false);
+  const [formError, setFormError]         = useState("");
+  const [paypalSuccess, setPaypalSuccess] = useState<{ donationId: string; captureId: string } | null>(null);
+  const [paypalError, setPaypalError]     = useState("");
+
+  // Derived — PayPal checkout mode guard
+  const paypalSetting   = methods.find((m) => m.method === "paypal");
+  const checkoutEnabled = paypalSetting?.config?.checkout_enabled === "true" && !!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
+  const manualMethods   = checkoutEnabled ? methods.filter((m) => m.method !== "paypal") : methods;
 
   const load = useCallback(async () => {
     const [authRes, methodsRes] = await Promise.all([
@@ -47,7 +57,12 @@ export default function SupportPage() {
     setUserId(authRes.data.user?.id ?? null);
     const loaded = (methodsRes.data as PaymentSetting[]) ?? [];
     setMethods(loaded);
-    if (loaded.length > 0) setSelectedMethod(loaded[0].method);
+    if (loaded.length > 0) {
+      const ppS = loaded.find((m) => m.method === "paypal");
+      const ppCheckout = ppS?.config?.checkout_enabled === "true" && !!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
+      const defaultM = ppCheckout ? (loaded.find((m) => m.method !== "paypal") ?? loaded[0]) : loaded[0];
+      setSelectedMethod(defaultM.method);
+    }
     setLoadingMethods(false);
   }, []);
 
@@ -55,6 +70,8 @@ export default function SupportPage() {
 
   const submit = async () => {
     if (!userId) { router.push("/login"); return; }
+    // PayPal checkout-enabled: real payment only — never insert a pending row manually
+    if (selectedMethod === "paypal" && checkoutEnabled) return;
     if (!selectedMethod || !amount || parseFloat(amount) <= 0) return;
     setSubmitting(true);
     setFormError("");
@@ -229,11 +246,102 @@ export default function SupportPage() {
           )}
         </div>
 
-        {/* "I have donated" form */}
-        {methods.length > 0 && !success && (
+        {/* PayPal Checkout — when platform PayPal is checkout-enabled */}
+        {checkoutEnabled && !paypalSuccess && (
+          <div className="rounded-2xl bg-white p-5 shadow-sm space-y-4">
+            <div className="flex items-center gap-2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+              </svg>
+              <h3 className="font-bold text-gray-900">
+                {isFr ? "Payer avec PayPal" : "Pay with PayPal"}
+              </h3>
+            </div>
+
+            <div className="flex gap-2">
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400"
+              >
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                min="1"
+                step="0.01"
+                className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+              />
+            </div>
+
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={t("pay_note_label")}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+            />
+
+            {paypalError && (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{paypalError}</p>
+            )}
+
+            <PayPalButton
+              key={`${currency}-${amount}`}
+              amountValue={amount || "0"}
+              currency={currency}
+              targetType="platform"
+              targetId={null}
+              giveType="donation"
+              note={note}
+              lang={lang}
+              onSuccess={(donationId, captureId) => {
+                setPaypalSuccess({ donationId, captureId });
+                setPaypalError("");
+              }}
+              onError={(msg) => setPaypalError(msg)}
+            />
+
+            {/* Secure PayPal badge */}
+            <div className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+              <span className="text-xs font-semibold text-blue-700">
+                {isFr ? "Paiement PayPal sécurisé" : "Secure PayPal Checkout"}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* PayPal success state */}
+        {paypalSuccess && (
+          <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-center space-y-2">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/>
+              </svg>
+            </div>
+            <p className="font-semibold text-green-800">
+              {isFr ? "Merci pour votre don ! Paiement confirmé." : "Thank you! Your payment has been confirmed."}
+            </p>
+            <button
+              onClick={() => { setPaypalSuccess(null); setAmount(""); setNote(""); }}
+              className="text-sm text-green-700 underline"
+            >
+              {isFr ? "Faire un autre don" : "Donate again"}
+            </button>
+          </div>
+        )}
+
+        {/* "I have donated" form — manual recording for non-PayPal methods only */}
+        {manualMethods.length > 0 && !success && (
           <div className="rounded-2xl bg-white p-5 shadow-sm space-y-4">
             <h3 className="font-bold text-gray-900">
-              {isFr ? "Enregistrer mon don" : "Record my donation"}
+              {isFr ? "Enregistrer mon don (manuel)" : "Record my donation (manual)"}
             </h3>
 
             <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
@@ -250,7 +358,7 @@ export default function SupportPage() {
                 onChange={(e) => setSelectedMethod(e.target.value)}
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400"
               >
-                {methods.map((m) => (
+                {manualMethods.map((m) => (
                   <option key={m.id} value={m.method}>
                     {m.label || methodName(m.method)}
                   </option>
@@ -278,7 +386,6 @@ export default function SupportPage() {
               />
             </div>
 
-            {/* Reference */}
             <input
               type="text"
               value={reference}

@@ -149,6 +149,77 @@ export default function AdminPaymentsPage() {
         {t("pay_pending_notice")}
       </p>
 
+      {/* ── PayPal Checkout (real-time) ────────────────────────────────────── */}
+      <div className="rounded-2xl bg-white shadow-sm overflow-hidden">
+        <div className="px-5 py-4 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+              </svg>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">PayPal Checkout (Real-time)</p>
+              <p className="text-xs text-gray-400">Enable the PayPal button for live payments</p>
+            </div>
+            {/* Toggle checkout_enabled in config */}
+            <button
+              onClick={() => {
+                const current = settings.paypal.config?.checkout_enabled === "true";
+                updateField("paypal", "checkout_enabled", current ? "false" : "true");
+              }}
+              className={`relative ml-auto h-6 w-11 rounded-full transition-colors ${
+                settings.paypal.config?.checkout_enabled === "true" ? "bg-blue-500" : "bg-gray-200"
+              }`}
+            >
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                settings.paypal.config?.checkout_enabled === "true" ? "left-5" : "left-0.5"
+              }`} />
+            </button>
+          </div>
+
+          {/* Client ID status */}
+          <div className="rounded-xl bg-gray-50 px-3 py-3 space-y-1.5 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">NEXT_PUBLIC_PAYPAL_CLIENT_ID</span>
+              {process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ? (
+                <span className="flex items-center gap-1 text-green-600 font-medium">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+                  Configured
+                </span>
+              ) : (
+                <span className="text-red-500 font-medium">Not set in Vercel env</span>
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">PAYPAL_CLIENT_SECRET</span>
+              <span className="text-xs text-gray-400">Server-only — never shown here</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Mode</span>
+              <span className={`font-medium ${process.env.PAYPAL_MODE === "live" ? "text-green-600" : "text-amber-600"}`}>
+                {process.env.PAYPAL_MODE === "live" ? "Live" : "Sandbox"}
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 space-y-1">
+            <p className="font-semibold">Security reminder</p>
+            <p>PAYPAL_CLIENT_SECRET must remain in Vercel environment variables only. Never paste it here or in any database field.</p>
+          </div>
+
+          <button
+            onClick={() => save("paypal")}
+            disabled={saving === "paypal"}
+            className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+          >
+            {saving === "paypal" ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : saved === "paypal" ? "Saved ✓" : "Save PayPal Checkout Settings"}
+          </button>
+        </div>
+      </div>
+
       {METHODS.map(({ key: method, icon }) => {
         const s = settings[method];
         const isOpen = expanded === method;

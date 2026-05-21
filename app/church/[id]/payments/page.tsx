@@ -253,6 +253,28 @@ export default function ChurchPaymentsPage() {
           <>
             <p className="text-sm text-gray-500">{t("pay_pending_notice")}</p>
 
+            {/* PayPal Checkout Beta notice */}
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                </svg>
+                <p className="font-semibold text-blue-800 text-sm">PayPal Checkout — Beta (Platform Managed)</p>
+              </div>
+              <p className="text-xs text-blue-700 leading-relaxed">
+                During beta, all PayPal donations are processed through the TheBride platform account. Your church does not need its own PayPal credentials. Donations are tracked in your reporting below. A church-direct payout structure will be introduced in a future release.
+              </p>
+              {process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ? (
+                <p className="text-xs font-medium text-green-700">
+                  ✓ PayPal checkout is active on your giving page (if enabled by platform admin).
+                </p>
+              ) : (
+                <p className="text-xs text-amber-700">
+                  PayPal checkout is not yet configured by the platform administrator.
+                </p>
+              )}
+            </div>
+
             {METHODS.map(({ key: method }) => {
               const s = settings[method];
               const isOpen = expanded === method;

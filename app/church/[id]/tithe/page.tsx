@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { supabase } from "../../../../lib/supabase";
 import { useLanguage } from "../../../../lib/useLanguage";
+
+const PayPalButton = dynamic(() => import("../../../components/payments/PayPalButton"), { ssr: false });
 
 type PaymentSetting = {
   id: string;
@@ -62,6 +65,14 @@ export default function TithePage() {
   const [note, setNote]               = useState("");
   const [submitting, setSubmitting]   = useState(false);
   const [giveSuccess, setGiveSuccess] = useState(false);
+  const [paypalSuccess, setPaypalSuccess] = useState<{ donationId: string; captureId: string } | null>(null);
+  const [paypalError, setPaypalError]     = useState("");
+
+  // Derived: is checkout-enabled PayPal configured by the platform?
+  const paypalMethod = methods.find((m) => m.method === "paypal");
+  const paypalCheckoutEnabled =
+    paypalMethod?.config?.checkout_enabled === "true" &&
+    !!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +107,8 @@ export default function TithePage() {
 
   const submitGiving = async () => {
     if (!currentUserId || !selectedMethod || !amount || parseFloat(amount) <= 0) return;
+    // PayPal checkout-enabled: real payment only — never insert a pending row manually
+    if (selectedMethod === "paypal" && paypalCheckoutEnabled) return;
     setSubmitting(true);
     setUiMessage("");
 
@@ -267,9 +280,11 @@ export default function TithePage() {
               {isFr ? "Enregistrer mon don" : "Record My Giving"}
             </h2>
 
-            <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
-              {t("pay_pending_notice")}
-            </div>
+            {!(selectedMethod === "paypal" && paypalCheckoutEnabled) && (
+              <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
+                {t("pay_pending_notice")}
+              </div>
+            )}
 
             {/* Give type selector */}
             <div>
@@ -330,21 +345,24 @@ export default function TithePage() {
               />
             </div>
 
-            <input
-              type="text"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              placeholder={t("pay_reference")}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
-            />
-
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder={t("pay_note_label")}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
-            />
+            {!(selectedMethod === "paypal" && paypalCheckoutEnabled) && (
+              <>
+                <input
+                  type="text"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder={t("pay_reference")}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+                />
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={t("pay_note_label")}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+                />
+              </>
+            )}
 
             {giveSuccess && (
               <div className="rounded-xl bg-green-50 px-3 py-2.5 text-sm font-medium text-green-700">
@@ -352,18 +370,92 @@ export default function TithePage() {
               </div>
             )}
 
-            <button
-              onClick={submitGiving}
-              disabled={submitting || !selectedMethod || !amount || parseFloat(amount) <= 0}
-              className="w-full rounded-xl bg-amber-500 py-3 font-bold text-white hover:bg-amber-600 disabled:opacity-60"
-            >
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  {isFr ? "Enregistrement…" : "Recording…"}
-                </span>
-              ) : t("pay_sent_button")}
-            </button>
+            {/* PayPal Checkout — only when PayPal method selected and checkout enabled */}
+            {selectedMethod === "paypal" && paypalCheckoutEnabled && (
+              <div className="space-y-3 border-t border-gray-100 pt-4">
+                <div className="flex items-center gap-2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                  </svg>
+                  <p className="text-sm font-semibold text-gray-700">
+                    {isFr ? "Payer maintenant avec PayPal" : "Pay now with PayPal"}
+                  </p>
+                  <div className="ml-auto flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                    <span className="text-xs font-semibold text-blue-700">
+                      {isFr ? "Sécurisé" : "Secure"}
+                    </span>
+                  </div>
+                </div>
+
+                {paypalSuccess ? (
+                  <div className="rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700 text-center">
+                    <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-green-100">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/>
+                      </svg>
+                    </div>
+                    <p className="font-semibold">
+                      {isFr ? "Paiement confirmé ! Merci pour votre don." : "Payment confirmed! Thank you for giving."}
+                    </p>
+                    <button
+                      onClick={() => { setPaypalSuccess(null); setPaypalError(""); setAmount(""); }}
+                      className="mt-2 text-xs text-green-700 underline"
+                    >
+                      {isFr ? "Faire un autre don" : "Give again"}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {paypalError && (
+                      <div className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{paypalError}</div>
+                    )}
+                    <PayPalButton
+                      key={`${currency}-${amount}`}
+                      amountValue={amount || "0"}
+                      currency={currency}
+                      targetType="church"
+                      targetId={churchId}
+                      giveType={giveType}
+                      note={note}
+                      lang={lang}
+                      onSuccess={(donationId, captureId) => {
+                        setPaypalSuccess({ donationId, captureId });
+                        setPaypalError("");
+                        load();
+                      }}
+                      onError={(msg) => setPaypalError(msg)}
+                    />
+                    <div className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                      </svg>
+                      <span className="text-xs font-semibold text-blue-700">
+                        {isFr ? "Paiement PayPal sécurisé — Beta" : "Secure PayPal Checkout — Beta"}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Manual record button (non-PayPal or when checkout not enabled) */}
+            {!(selectedMethod === "paypal" && paypalCheckoutEnabled) && (
+              <button
+                onClick={submitGiving}
+                disabled={submitting || !selectedMethod || !amount || parseFloat(amount) <= 0}
+                className="w-full rounded-xl bg-amber-500 py-3 font-bold text-white hover:bg-amber-600 disabled:opacity-60"
+              >
+                {submitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    {isFr ? "Enregistrement…" : "Recording…"}
+                  </span>
+                ) : t("pay_sent_button")}
+              </button>
+            )}
           </div>
         )}
 
