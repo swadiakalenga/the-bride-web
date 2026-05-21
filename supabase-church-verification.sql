@@ -169,6 +169,17 @@ begin
     rejection_reason = p_rejection_reason,
     updated_at       = now()
   where church_id = p_church_id;
+  -- Note: trg_sync_church_verification_status fires here and sets
+  -- churches.verification_status = p_status automatically.
+
+  -- Also keep the extra canonical fields in sync on churches
+  -- (the trigger only handles verification_status)
+  update public.churches
+  set
+    location_verified            = (p_status = 'verified'),
+    location_verified_at         = case when p_status = 'verified' then now() else null end,
+    location_verification_status = case when p_status = 'verified' then 'approved' else 'rejected' end
+  where id = p_church_id;
 
   -- Notify the church admin
   if v_submitted_by is not null then

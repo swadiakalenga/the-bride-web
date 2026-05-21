@@ -26,7 +26,18 @@ type Church = {
   id: string;
   name: string;
   verification_status: string | null;
+  location_verified: boolean | null;
+  location_verification_status: string | null;
 };
+
+function isChurchVerified(c: Church | null): boolean {
+  if (!c) return false;
+  return (
+    c.verification_status === "verified" ||
+    c.location_verified === true ||
+    c.location_verification_status === "approved"
+  );
+}
 
 const STATUS_COLORS: Record<string, string> = {
   pending:   "bg-yellow-100 text-yellow-700",
@@ -56,7 +67,7 @@ export default function TithePage() {
     setCurrentUserId(me);
 
     const [churchRes, profileRes, memberRes, donRes] = await Promise.all([
-      supabase.from("churches").select("id, name, verification_status").eq("id", churchId).maybeSingle(),
+      supabase.from("churches").select("id, name, verification_status, location_verified, location_verification_status").eq("id", churchId).maybeSingle(),
       supabase.from("profiles").select("role, church_id").eq("id", me).maybeSingle(),
       supabase.from("church_memberships").select("status").eq("church_id", churchId).eq("user_id", me).maybeSingle(),
       supabase.from("donations")
@@ -98,7 +109,7 @@ export default function TithePage() {
     );
   }
 
-  const isVerified = church?.verification_status === "approved";
+  const isVerified = isChurchVerified(church);
 
   return (
     <main className="min-h-screen bg-gray-50 pb-10">
