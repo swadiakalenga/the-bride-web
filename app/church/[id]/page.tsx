@@ -43,22 +43,25 @@ export default function ChurchProfilePage() {
   const [isBlocked,    setIsBlocked]    = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [debugError,   setDebugError]   = useState<string | null>(null);
 
   useEffect(() => { loadChurch(); }, [churchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadChurch() {
     setLoading(true);
+    setDebugError(null);
     const { data: authData } = await supabase.auth.getUser();
     const me = authData.user?.id;
     if (!me) { router.push("/login"); return; }
     setCurrentUserId(me);
 
-    const { data: churchData } = await supabase
+    const { data: churchData, error: churchErr } = await supabase
       .from("churches")
       .select("id, name, description, pastor_name, location, avatar_url, cover_url, email, phone, website, city, country, created_at, physical_address, address_line2, state_region, postal_code, public_address")
       .eq("id", churchId)
       .maybeSingle();
 
+    if (churchErr) setDebugError(churchErr.message);
     if (!churchData) { setLoading(false); return; }
     setChurch(churchData as ChurchInfo);
 
@@ -178,9 +181,17 @@ export default function ChurchProfilePage() {
 
       <div className="mx-auto w-full max-w-lg">
         {!church ? (
-          <div className="mt-8 text-center px-4">
-            <p className="text-4xl mb-2">⛪</p>
-            <p className="font-semibold text-gray-700">{isFr ? "Église introuvable" : "Church not found"}</p>
+          <div className="mt-8 px-4 space-y-3">
+            <div className="text-center">
+              <p className="text-4xl mb-2">⛪</p>
+              <p className="font-semibold text-gray-700">{isFr ? "Église introuvable" : "Church not found"}</p>
+            </div>
+            {/* Temporary debug block — remove once RLS + schema are confirmed */}
+            <div className="rounded-xl bg-gray-100 border border-gray-200 px-4 py-3 text-xs text-gray-600 space-y-1 font-mono">
+              <p><span className="font-bold text-gray-800">route id:</span> {churchId}</p>
+              <p><span className="font-bold text-gray-800">error:</span> {debugError ?? "none — data is null (row missing or RLS silently blocked)"}</p>
+              <p><span className="font-bold text-gray-800">data:</span> null</p>
+            </div>
           </div>
         ) : (
           <>
