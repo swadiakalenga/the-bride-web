@@ -12,9 +12,14 @@ type PaymentSetting = {
   id: string;
   method: string;
   label: string | null;
-  config: Record<string, string>;
+  config: Record<string, unknown>;
   instructions: string | null;
 };
+
+/** True for both string "true" and boolean true — JSONB can return either */
+function isTruthy(val: unknown): boolean {
+  return val === "true" || val === true;
+}
 
 type Donation = {
   id: string;
@@ -68,10 +73,10 @@ export default function TithePage() {
   const [paypalSuccess, setPaypalSuccess] = useState<{ donationId: string; captureId: string } | null>(null);
   const [paypalError, setPaypalError]     = useState("");
 
-  // Derived: is checkout-enabled PayPal configured by the platform?
+  // Derived: is checkout-enabled PayPal configured? Safe against JSONB boolean vs string.
   const paypalMethod = methods.find((m) => m.method === "paypal");
   const paypalCheckoutEnabled =
-    paypalMethod?.config?.checkout_enabled === "true" &&
+    isTruthy(paypalMethod?.config?.checkout_enabled) &&
     !!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
 
   const load = useCallback(async () => {
@@ -144,7 +149,7 @@ export default function TithePage() {
   };
 
   const renderMethodDetails = (setting: PaymentSetting) => {
-    const cfg = setting.config;
+    const cfg = setting.config as Record<string, string>;
     const m = setting.method;
     return (
       <div className="space-y-1.5 text-sm">

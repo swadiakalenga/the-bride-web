@@ -12,7 +12,7 @@ type PaymentSetting = {
   id: string;
   method: string;
   label: string | null;
-  config: Record<string, string>;
+  config: Record<string, unknown>;
   instructions: string | null;
 };
 
@@ -20,30 +20,38 @@ type Method = "paypal" | "mobile_money" | "bank" | "stripe";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "NGN", "KES", "ZAR", "GHS", "XAF", "XOF"];
 
+/** True for both string "true" and boolean true — JSONB can return either */
+function isTruthy(val: unknown): boolean {
+  return val === "true" || val === true;
+}
+
 export default function SupportPage() {
   const router = useRouter();
   const { t, lang } = useLanguage();
   const isFr = lang === "fr";
 
-  const [methods, setMethods]           = useState<PaymentSetting[]>([]);
-  const [userId, setUserId]             = useState<string | null>(null);
+  const [methods, setMethods]               = useState<PaymentSetting[]>([]);
+  const [userId, setUserId]                 = useState<string | null>(null);
   const [loadingMethods, setLoadingMethods] = useState(true);
 
   const [selectedMethod, setSelectedMethod] = useState<string>("");
-  const [amount, setAmount]             = useState("");
-  const [currency, setCurrency]         = useState("USD");
-  const [reference, setReference]       = useState("");
-  const [note, setNote]                 = useState("");
-  const [submitting, setSubmitting]       = useState(false);
-  const [success, setSuccess]             = useState(false);
-  const [formError, setFormError]         = useState("");
-  const [paypalSuccess, setPaypalSuccess] = useState<{ donationId: string; captureId: string } | null>(null);
-  const [paypalError, setPaypalError]     = useState("");
+  const [amount, setAmount]                 = useState("");
+  const [currency, setCurrency]             = useState("USD");
+  const [reference, setReference]           = useState("");
+  const [note, setNote]                     = useState("");
+  const [submitting, setSubmitting]         = useState(false);
+  const [success, setSuccess]               = useState(false);
+  const [formError, setFormError]           = useState("");
+  const [paypalSuccess, setPaypalSuccess]   = useState<{ donationId: string; captureId: string } | null>(null);
+  const [paypalError, setPaypalError]       = useState("");
 
-  // Derived — PayPal checkout mode guard
-  const paypalSetting   = methods.find((m) => m.method === "paypal");
-  const checkoutEnabled = paypalSetting?.config?.checkout_enabled === "true" && !!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
-  const manualMethods   = checkoutEnabled ? methods.filter((m) => m.method !== "paypal") : methods;
+  // ── Derived guards ────────────────────────────────────────────────────────
+  const paypalSetting     = methods.find((m) => m.method === "paypal");
+  // Safe against both string "true" and boolean true from Supabase JSONB
+  const paypalCheckoutOn  = isTruthy(paypalSetting?.config?.checkout_enabled);
+  const hasPaypalClientId = !!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
+  // PayPal is NEVER a manual method — excluded regardless of checkout_enabled
+  const manualMethods     = methods.filter((m) => m.method !== "paypal");
 
   const load = useCallback(async () => {
     const [authRes, methodsRes] = await Promise.all([
@@ -57,12 +65,10 @@ export default function SupportPage() {
     setUserId(authRes.data.user?.id ?? null);
     const loaded = (methodsRes.data as PaymentSetting[]) ?? [];
     setMethods(loaded);
-    if (loaded.length > 0) {
-      const ppS = loaded.find((m) => m.method === "paypal");
-      const ppCheckout = ppS?.config?.checkout_enabled === "true" && !!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
-      const defaultM = ppCheckout ? (loaded.find((m) => m.method !== "paypal") ?? loaded[0]) : loaded[0];
-      setSelectedMethod(defaultM.method);
-    }
+    // Default selection: first non-PayPal method (PayPal uses its own checkout panel)
+    const firstManual = loaded.find((m) => m.method !== "paypal");
+    if (firstManual) setSelectedMethod(firstManual.method);
+    else if (loaded.length > 0) setSelectedMethod(loaded[0].method);
     setLoadingMethods(false);
   }, []);
 
@@ -70,8 +76,15 @@ export default function SupportPage() {
 
   const submit = async () => {
     if (!userId) { router.push("/login"); return; }
-    // PayPal checkout-enabled: real payment only — never insert a pending row manually
-    if (selectedMethod === "paypal" && checkoutEnabled) return;
+    // Hard block — PayPal is never manual, regardless of checkout_enabled state
+    if (selectedMethod === "paypal") {
+      setFormError(
+        isFr
+          ? "PayPal doit être complété via le bouton PayPal sécurisé ci-dessus."
+          : "PayPal must be completed using secure PayPal Checkout."
+      );
+      return;
+    }
     if (!selectedMethod || !amount || parseFloat(amount) <= 0) return;
     setSubmitting(true);
     setFormError("");
@@ -105,7 +118,7 @@ export default function SupportPage() {
   };
 
   const renderMethodDetails = (setting: PaymentSetting) => {
-    const cfg = setting.config;
+    const cfg = setting.config as Record<string, string>;
     const m = setting.method as Method;
     return (
       <div className="mt-3 space-y-2 text-sm">
@@ -170,6 +183,23 @@ export default function SupportPage() {
       </header>
 
       <div className="mx-auto max-w-lg px-4 py-8 space-y-6">
+
+        {/* ── DEBUG PANEL — remove before final production deploy ─────────── */}
+        {!loadingMethods && (
+          <div className="rounded-xl border-2 border-red-400 bg-red-50 p-4 font-mono text-xs space-y-1">
+            <p className="font-bold text-red-700">DEBUG (remove before deploy)</p>
+            <p>methods count: {methods.length}</p>
+            <p>paypalSetting id: {paypalSetting?.id ?? "none"}</p>
+            <p>config.checkout_enabled: {JSON.stringify(paypalSetting?.config?.checkout_enabled)}</p>
+            <p>paypalCheckoutOn: {String(paypalCheckoutOn)}</p>
+            <p>hasPaypalClientId: {String(hasPaypalClientId)}</p>
+            <p>manualMethods count: {manualMethods.length}</p>
+            <p>manualMethods: [{manualMethods.map((m) => m.method).join(", ") || "none"}]</p>
+            <p>selectedMethod: {selectedMethod || "(empty)"}</p>
+          </div>
+        )}
+        {/* ── END DEBUG ─────────────────────────────────────────────────────── */}
+
         {/* Hero */}
         <div className="rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 p-6 text-center text-white shadow-lg">
           <div className="mb-3 flex justify-center">
@@ -210,7 +240,7 @@ export default function SupportPage() {
           </ul>
         </div>
 
-        {/* Payment methods */}
+        {/* Payment method info cards */}
         <div className="space-y-3">
           <h3 className="font-bold text-gray-900">
             {isFr ? "Comment faire un don" : "How to donate"}
@@ -246,8 +276,11 @@ export default function SupportPage() {
           )}
         </div>
 
-        {/* PayPal Checkout — when platform PayPal is checkout-enabled */}
-        {checkoutEnabled && !paypalSuccess && (
+        {/* ── PayPal section ─────────────────────────────────────────────────
+            Shows whenever PayPal is an enabled method.
+            Content depends on whether checkout is properly configured.
+        ─────────────────────────────────────────────────────────────────── */}
+        {paypalSetting && !paypalSuccess && (
           <div className="rounded-2xl bg-white p-5 shadow-sm space-y-4">
             <div className="flex items-center gap-2">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -258,62 +291,81 @@ export default function SupportPage() {
               </h3>
             </div>
 
-            <div className="flex gap-2">
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400"
-              >
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                min="1"
-                step="0.01"
-                className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
-              />
-            </div>
+            {!paypalCheckoutOn ? (
+              /* checkout_enabled is false/missing — admin hasn't activated it */
+              <div className="rounded-xl bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                {isFr
+                  ? "Le paiement PayPal direct n'est pas encore activé. Contactez l'administrateur de la plateforme."
+                  : "Direct PayPal checkout is not enabled. Contact the platform admin to activate it."}
+              </div>
+            ) : !hasPaypalClientId ? (
+              /* checkout_enabled = true but env var missing */
+              <div className="rounded-xl bg-red-50 px-3 py-3 text-sm text-red-700">
+                {isFr
+                  ? "Clé PayPal manquante dans les variables d'environnement. Contactez l'administrateur."
+                  : "PayPal Client ID missing in environment variables. Contact the platform admin."}
+              </div>
+            ) : (
+              /* Fully configured — show real checkout */
+              <>
+                <div className="flex gap-2">
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400"
+                  >
+                    {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    min="1"
+                    step="0.01"
+                    className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+                  />
+                </div>
 
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder={t("pay_note_label")}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
-            />
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={t("pay_note_label")}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:bg-white"
+                />
 
-            {paypalError && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{paypalError}</p>
+                {paypalError && (
+                  <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{paypalError}</p>
+                )}
+
+                <PayPalButton
+                  key={`${currency}-${amount}`}
+                  amountValue={amount || "0"}
+                  currency={currency}
+                  targetType="platform"
+                  targetId={null}
+                  giveType="donation"
+                  note={note}
+                  lang={lang}
+                  onSuccess={(donationId, captureId) => {
+                    setPaypalSuccess({ donationId, captureId });
+                    setPaypalError("");
+                  }}
+                  onError={(msg) => setPaypalError(msg)}
+                />
+
+                {/* Secure badge */}
+                <div className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                  </svg>
+                  <span className="text-xs font-semibold text-blue-700">
+                    {isFr ? "Paiement PayPal sécurisé" : "Secure PayPal Checkout"}
+                  </span>
+                </div>
+              </>
             )}
-
-            <PayPalButton
-              key={`${currency}-${amount}`}
-              amountValue={amount || "0"}
-              currency={currency}
-              targetType="platform"
-              targetId={null}
-              giveType="donation"
-              note={note}
-              lang={lang}
-              onSuccess={(donationId, captureId) => {
-                setPaypalSuccess({ donationId, captureId });
-                setPaypalError("");
-              }}
-              onError={(msg) => setPaypalError(msg)}
-            />
-
-            {/* Secure PayPal badge */}
-            <div className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0070ba" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-              </svg>
-              <span className="text-xs font-semibold text-blue-700">
-                {isFr ? "Paiement PayPal sécurisé" : "Secure PayPal Checkout"}
-              </span>
-            </div>
           </div>
         )}
 
@@ -337,7 +389,7 @@ export default function SupportPage() {
           </div>
         )}
 
-        {/* "I have donated" form — manual recording for non-PayPal methods only */}
+        {/* ── Manual form — mobile money, bank, etc. PayPal is NEVER here ─── */}
         {manualMethods.length > 0 && !success && (
           <div className="rounded-2xl bg-white p-5 shadow-sm space-y-4">
             <h3 className="font-bold text-gray-900">
@@ -348,7 +400,7 @@ export default function SupportPage() {
               {t("pay_pending_notice")}
             </div>
 
-            {/* Method select */}
+            {/* Method select — PayPal never appears here */}
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                 {t("pay_method_select")}
