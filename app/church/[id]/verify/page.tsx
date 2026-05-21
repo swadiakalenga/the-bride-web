@@ -135,21 +135,27 @@ export default function ChurchVerifyPage() {
     setIsError(false);
 
     try {
+      // Auth check first — uid is needed for the storage path
+      const { data: authData } = await supabase.auth.getUser();
+      const me = authData.user?.id;
+      if (!me) throw new Error(isFr ? "Non connecté" : "Not authenticated");
+
       let proofUrl = existing?.location_proof_url ?? null;
 
       if (proofFile) {
         const ext  = proofFile.name.split(".").pop();
-        const path = `${churchId}/location-proof-${Date.now()}.${ext}`;
+        // 3-segment path (churchId/userId/filename) required by storage RLS
+        const path = `${churchId}/${me}/location-proof-${Date.now()}.${ext}`;
         const { error: upErr } = await supabase.storage
           .from("church-documents")
           .upload(path, proofFile, { upsert: true });
-        if (upErr) throw new Error(upErr.message);
-        // Signed URL generated server-side by admin — store path only
+        if (upErr) {
+          throw new Error(isFr
+            ? `Échec du téléversement : ${upErr.message}`
+            : `Upload failed: ${upErr.message}`);
+        }
         proofUrl = path;
       }
-
-      const { data: authData } = await supabase.auth.getUser();
-      const me = authData.user?.id;
 
       const payload = {
         church_id:           churchId,
@@ -164,11 +170,15 @@ export default function ChurchVerifyPage() {
         location_notes:      notes.trim() || null,
       };
 
-      const { error } = await supabase
+      const { error: dbErr } = await supabase
         .from("church_verifications")
         .upsert([payload], { onConflict: "church_id" });
 
-      if (error) throw new Error(error.message);
+      if (dbErr) {
+        throw new Error(isFr
+          ? `Erreur d'enregistrement : ${dbErr.message}`
+          : `Save failed: ${dbErr.message}`);
+      }
 
       // Update church location_verification_status to pending
       await supabase

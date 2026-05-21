@@ -16,24 +16,40 @@ This document explains what needs to be configured in the Supabase dashboard.
 
 ## 2 — Customize the OTP email template
 
-1. Go to **Authentication → Email Templates → Magic Link / OTP**
-2. Change the template subject to something clear:
+> **This step is required.** Without it, Supabase sends a magic link (clickable URL) instead of a 6-digit code. The app will show a warning to the user until this is configured.
+
+1. Go to **Authentication → Email Templates**
+2. Select the **"Magic Link"** template (Supabase uses this template for both magic links and OTP codes)
+3. Change the subject line:
 
 ```
 Your TheBride login code
 ```
 
-3. In the template body, make sure `{{ .Token }}` is included — this is the 6-digit code:
+4. Replace the entire body with the code-only template below.  
+   **Use `{{ .Token }}` — not `{{ .ConfirmationURL }}`.**  
+   `{{ .ConfirmationURL }}` produces a clickable link; `{{ .Token }}` produces the 6-digit number.
 
 ```html
 <h2>Your TheBride login code</h2>
 <p>Enter this code to sign in to your TheBride account:</p>
-<h1 style="letter-spacing: 6px; font-size: 36px; font-weight: bold;">{{ .Token }}</h1>
+<h1 style="letter-spacing: 8px; font-size: 40px; font-weight: bold; font-family: monospace;">{{ .Token }}</h1>
 <p>This code expires in <strong>10 minutes</strong>.</p>
 <p>If you did not request this code, you can safely ignore this email.</p>
 ```
 
-> **Important:** `{{ .Token }}` is the 6-digit OTP. Do not use `{{ .ConfirmationURL }}` for the OTP flow — that is for magic links.
+5. Click **Save**.
+
+### What happens if the template is NOT updated
+
+- Supabase sends an email with a clickable link instead of a 6-digit code.
+- The user sees a number input on-screen expecting a code, but receives a link in their inbox.
+- The login page shows an amber warning: *"If you received a link instead of a 6-digit code, the Supabase email template needs updating."*
+- Fix: update the template as described above, then re-send the code.
+
+> **Summary of the critical difference:**
+> - `{{ .Token }}` → 6-digit number (e.g. `847293`) — what the app expects
+> - `{{ .ConfirmationURL }}` → clickable URL — used for magic link flows only
 
 ---
 

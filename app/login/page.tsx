@@ -267,6 +267,13 @@ export default function LoginPage() {
                   <span className="block font-medium">{email}</span>
                 </div>
 
+                {/* Template setup note — shown if email arrived as a link instead of code */}
+                <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-800">
+                  {lang === "fr"
+                    ? "Si vous avez reçu un lien plutôt qu'un code à 6 chiffres, le modèle d'e-mail Supabase doit être mis à jour. Contactez votre administrateur."
+                    : "If you received a link instead of a 6-digit code, the Supabase email template needs updating. Contact your administrator."}
+                </div>
+
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">
                     {t("login_enter_code")}
