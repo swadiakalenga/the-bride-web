@@ -91,6 +91,7 @@ export default function Feed() {
 
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   // Tagging
@@ -1100,6 +1101,16 @@ export default function Feed() {
     loadPosts();
   };
 
+  const blockUser = async (userId: string) => {
+    if (!currentUserId) return;
+    const label = lang === "fr"
+      ? "Bloquer cet utilisateur ? Son contenu sera masqué."
+      : "Block this user? Their content will be hidden.";
+    if (!confirm(label)) return;
+    await supabase.from("user_blocks").insert([{ blocker_id: currentUserId, blocked_id: userId }]);
+    setBlockedUserIds((prev) => new Set([...prev, userId]));
+  };
+
   const startEditing = (post: Post) => {
     setEditingPostId(post.id);
     setEditContent(post.content || "");
@@ -2032,6 +2043,17 @@ export default function Feed() {
                                 Delete
                               </button>
                             </>
+                          )}
+                          {currentUserId && post.user_id !== currentUserId && !blockedUserIds.has(post.user_id) && (
+                            <button
+                              onClick={() => blockUser(post.user_id)}
+                              className="rounded-full px-2.5 py-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                              title={lang === "fr" ? "Bloquer" : "Block"}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                              </svg>
+                            </button>
                           )}
                         </div>
                       </div>

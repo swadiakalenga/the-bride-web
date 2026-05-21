@@ -92,6 +92,9 @@ export default function ChatPage() {
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrls, setLightboxUrls] = useState<string[]>([]);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -168,11 +171,10 @@ export default function ChatPage() {
 
     if (others && others.length > 0) {
       const otherId = others[0].user_id;
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .eq("id", otherId)
-        .maybeSingle();
+      const [{ data: profile }, { data: blockRow }] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, avatar_url").eq("id", otherId).maybeSingle(),
+        supabase.from("user_blocks").select("id").eq("blocker_id", me).eq("blocked_id", otherId).maybeSingle(),
+      ]);
 
       if (isMounted()) {
         setOtherUser({
@@ -180,6 +182,7 @@ export default function ChatPage() {
           full_name: profile?.full_name ?? null,
           avatar_url: profile?.avatar_url ?? null,
         });
+        setIsBlocked(!!blockRow);
       }
     }
 
@@ -458,6 +461,22 @@ export default function ChatPage() {
 
   const otherName = otherUser?.full_name || "User";
 
+  const handleBlock = async () => {
+    const me = currentUserId;
+    const otherId = otherUser?.id;
+    if (!me || !otherId) return;
+    setBlockLoading(true);
+    if (isBlocked) {
+      await supabase.from("user_blocks").delete().eq("blocker_id", me).eq("blocked_id", otherId);
+      setIsBlocked(false);
+    } else {
+      await supabase.from("user_blocks").insert([{ blocker_id: me, blocked_id: otherId }]);
+      setIsBlocked(true);
+    }
+    setBlockLoading(false);
+    setShowBlockConfirm(false);
+  };
+
   const renderMediaContent = (msg: ChatMessage, isMe: boolean) => {
     if (!msg.media_url || !msg.media_type) return null;
 
@@ -584,7 +603,7 @@ export default function ChatPage() {
           </div>
         </button>
 
-        {/* Call/video placeholders */}
+        {/* Call/video placeholders + block */}
         <div className="flex items-center gap-1">
           <button className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -596,8 +615,53 @@ export default function ChatPage() {
               <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
             </svg>
           </button>
+          <button
+            onClick={() => isBlocked ? handleBlock() : setShowBlockConfirm(true)}
+            disabled={blockLoading}
+            title={isBlocked
+              ? (lang === "fr" ? "Débloquer" : "Unblock")
+              : (lang === "fr" ? "Bloquer" : "Block")}
+            className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:opacity-50 ${
+              isBlocked ? "text-amber-500 hover:bg-amber-50" : "text-gray-400 hover:bg-red-50 hover:text-red-500"
+            }`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+            </svg>
+          </button>
         </div>
       </div>
+
+      {/* Block confirm dialog */}
+      {showBlockConfirm && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 px-4 pb-8">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
+            <p className="font-semibold text-gray-900">
+              {lang === "fr" ? `Bloquer ${otherUser?.full_name ?? "cet utilisateur"} ?` : `Block ${otherUser?.full_name ?? "this user"}?`}
+            </p>
+            <p className="text-sm text-gray-600">
+              {lang === "fr"
+                ? "Cette personne ne pourra plus vous envoyer de messages ni voir votre contenu."
+                : "This person will no longer be able to message you or see your content."}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBlockConfirm(false)}
+                className="flex-1 rounded-xl border border-gray-200 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                {lang === "fr" ? "Annuler" : "Cancel"}
+              </button>
+              <button
+                onClick={handleBlock}
+                disabled={blockLoading}
+                className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-bold text-white hover:bg-red-600 disabled:opacity-60"
+              >
+                {blockLoading ? "…" : (lang === "fr" ? "Bloquer" : "Block")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {uiMessage && (
         <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-600">

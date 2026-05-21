@@ -131,12 +131,26 @@ function InnerForm({ onSuccess, onCancel, lang }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* "No charge" notice — must be above the card input */}
+      <div className="flex items-start gap-2 rounded-xl bg-green-50 px-3 py-2.5 text-xs text-green-800">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <span>
+          {isFr
+            ? "Votre carte sera enregistrée en toute sécurité. Aucun paiement ne sera effectué maintenant."
+            : "Your card will be saved securely. No payment will be made now."}
+        </span>
+      </div>
+
       <div className="rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm">
         <CardElement options={CARD_STYLE} />
       </div>
 
       {error && (
-        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+        <div className="rounded-xl bg-red-50 px-3 py-2.5">
+          <p className="text-sm font-medium text-red-600">{error}</p>
+        </div>
       )}
 
       {/* Secure badge */}
