@@ -45,6 +45,11 @@ export default function ChurchProfilePage() {
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [debugError,   setDebugError]   = useState<string | null>(null);
 
+  // Image upload state (admin only)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingCover,  setUploadingCover]  = useState(false);
+  const [uploadError,     setUploadError]     = useState<string | null>(null);
+
   useEffect(() => { loadChurch(); }, [churchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadChurch() {
@@ -136,6 +141,40 @@ export default function ChurchProfilePage() {
     setShowBlockConfirm(false);
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    if (!file.type.startsWith("image/")) { setUploadError(isFr ? "Fichier image uniquement." : "Image files only."); return; }
+    if (file.size > 2 * 1024 * 1024) { setUploadError(isFr ? "Avatar : 2 Mo maximum." : "Avatar must be under 2 MB."); return; }
+    setUploadingAvatar(true);
+    const ext  = file.name.split(".").pop();
+    const path = `churches/${churchId}/avatar-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("media").upload(path, file, { upsert: true });
+    if (upErr) { setUploadError(upErr.message); setUploadingAvatar(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
+    const { error: dbErr } = await supabase.from("churches").update({ avatar_url: publicUrl }).eq("id", churchId);
+    if (dbErr) { setUploadError(dbErr.message); } else { setChurch((prev) => prev ? { ...prev, avatar_url: publicUrl } : prev); }
+    setUploadingAvatar(false);
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    if (!file.type.startsWith("image/")) { setUploadError(isFr ? "Fichier image uniquement." : "Image files only."); return; }
+    if (file.size > 5 * 1024 * 1024) { setUploadError(isFr ? "Couverture : 5 Mo maximum." : "Cover must be under 5 MB."); return; }
+    setUploadingCover(true);
+    const ext  = file.name.split(".").pop();
+    const path = `churches/${churchId}/cover-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("media").upload(path, file, { upsert: true });
+    if (upErr) { setUploadError(upErr.message); setUploadingCover(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
+    const { error: dbErr } = await supabase.from("churches").update({ cover_url: publicUrl }).eq("id", churchId);
+    if (dbErr) { setUploadError(dbErr.message); } else { setChurch((prev) => prev ? { ...prev, cover_url: publicUrl } : prev); }
+    setUploadingCover(false);
+  };
+
   // Address line shown on profile (only if public_address !== false)
   const publicAddress = church?.public_address !== false
     ? [church?.physical_address, church?.address_line2, church?.state_region, church?.postal_code]
@@ -197,18 +236,33 @@ export default function ChurchProfilePage() {
           <>
             {/* Church info banner */}
             <div className="bg-white border-b border-gray-100">
-              <div className="h-32 bg-gradient-to-br from-amber-200 via-amber-100 to-amber-50 relative">
+              {/* Cover */}
+              <div className="relative h-52 overflow-hidden bg-gradient-to-br from-amber-600 via-amber-400 to-amber-200">
                 {church.cover_url && (
-                  <img src={church.cover_url} alt="" className="h-full w-full object-cover" />
+                  <img src={church.cover_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                )}
+                {isAdmin && (
+                  <label className="absolute bottom-3 right-3 flex cursor-pointer items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm hover:bg-black/60 transition">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    {uploadingCover ? "…" : (isFr ? "Modifier la couverture" : "Edit cover")}
+                    <input type="file" accept="image/*" className="sr-only" onChange={handleCoverUpload} disabled={uploadingCover} />
+                  </label>
                 )}
               </div>
 
               <div className="px-4 pb-4">
-                <div className="-mt-10 mb-3">
+                {/* Avatar */}
+                <div className="relative -mt-12 mb-3 w-fit">
                   {church.avatar_url ? (
-                    <img src={church.avatar_url} alt={church.name} className="h-20 w-20 rounded-2xl border-4 border-white object-cover shadow-sm" />
+                    <img src={church.avatar_url} alt={church.name} className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-md" />
                   ) : (
-                    <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 border-white bg-amber-100 text-3xl shadow-sm">⛪</div>
+                    <div className="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-white bg-amber-100 text-4xl shadow-md">⛪</div>
+                  )}
+                  {isAdmin && (
+                    <label className="absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-amber-500 text-white shadow-md hover:bg-amber-600 transition">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                      <input type="file" accept="image/*" className="sr-only" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
+                    </label>
                   )}
                 </div>
 
@@ -231,6 +285,10 @@ export default function ChurchProfilePage() {
                     {memberCount === 1 ? (isFr ? "membre" : "member") : (isFr ? "membres" : "members")}
                   </span>
                 </div>
+
+                {uploadError && (
+                  <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{uploadError}</div>
+                )}
 
                 {/* Action buttons */}
                 <div className="mt-4 flex flex-wrap gap-2">
