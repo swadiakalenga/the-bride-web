@@ -86,7 +86,7 @@ export async function createNotification(params: NotificationParams): Promise<vo
   }
 
   // 2. Fire push — non-blocking, never propagates failure to the caller
-  firePush(params);
+  void firePush(params);
 }
 
 // ── Push delivery (fire-and-forget) ──────────────────────────────────────

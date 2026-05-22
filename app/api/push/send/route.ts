@@ -83,7 +83,7 @@ async function getFcmAccessToken(): Promise<string> {
   return access_token;
 }
 
-// ── Route handler ─────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────
 
 type PushBody = {
   user_id: string;
@@ -94,16 +94,48 @@ type PushBody = {
 
 type TokenRow = { id: string; token: string; platform: string };
 
+// ── GET — explicit 405 so health checks and browser probes get a clear response
+
+export function GET(req: NextRequest) {
+  console.log("[push] GET probe from", req.headers.get("user-agent") ?? "unknown", "referer:", req.headers.get("referer") ?? "none");
+  return NextResponse.json({ error: "Use POST" }, { status: 405 });
+}
+
+// ── POST ──────────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
-  // Verify caller has a valid Supabase session (same pattern as stripe routes)
+  console.log("[push] method", req.method);
+  console.log("[push] env vars present:", {
+    FIREBASE_PROJECT_ID:    !!process.env.FIREBASE_PROJECT_ID,
+    FIREBASE_CLIENT_EMAIL:  !!process.env.FIREBASE_CLIENT_EMAIL,
+    FIREBASE_PRIVATE_KEY:   !!process.env.FIREBASE_PRIVATE_KEY,
+    SUPABASE_SERVICE_ROLE:  !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  });
+
+  // Verify caller has a valid Supabase session
   const jwt = req.headers.get("Authorization")?.slice(7);
-  if (!jwt) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!jwt) {
+    console.log("[push] rejected: no Authorization header");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const db = adminDb();
   const { data: { user }, error: authErr } = await db.auth.getUser(jwt);
-  if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (authErr || !user) {
+    console.log("[push] rejected: invalid JWT", authErr?.message);
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const { user_id, title, body, data = {} } = (await req.json()) as PushBody;
+  let parsed: PushBody;
+  try {
+    parsed = (await req.json()) as PushBody;
+  } catch {
+    console.log("[push] rejected: invalid JSON body");
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { user_id, title, body, data = {} } = parsed;
+  console.log("[push] body received:", { user_id, title, body, data_keys: Object.keys(data) });
 
   if (!user_id || !title || !body) {
     return NextResponse.json({ error: "Missing user_id, title, or body" }, { status: 400 });
@@ -121,11 +153,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Token lookup failed" }, { status: 500 });
   }
 
+  console.log("[push] tokens found:", tokens?.length ?? 0);
+
   if (!tokens || tokens.length === 0) {
     return NextResponse.json({ sent: 0, reason: "no_tokens" });
   }
 
-  // FCM env vars — if not configured, skip silently rather than crash
+  // FCM env vars — skip silently when not yet configured (e.g. local dev)
   if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
     console.warn("[push] Firebase env vars not set — push skipped");
     return NextResponse.json({ sent: 0, reason: "firebase_not_configured" });
@@ -137,7 +171,7 @@ export async function POST(req: NextRequest) {
 
   const results = await Promise.allSettled(
     (tokens as TokenRow[]).map(async (row) => {
-      const res = await fetch(fcmUrl, {
+      const fcmRes = await fetch(fcmUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -165,7 +199,7 @@ export async function POST(req: NextRequest) {
         }),
       });
 
-      const json = (await res.json()) as {
+      const json = (await fcmRes.json()) as {
         name?: string;
         error?: {
           message?: string;
@@ -173,13 +207,16 @@ export async function POST(req: NextRequest) {
         };
       };
 
-      if (!res.ok) {
+      console.log("[push] FCM response for platform", row.platform, "→ ok:", fcmRes.ok, "status:", fcmRes.status, json.error?.message ?? json.name ?? "");
+
+      if (!fcmRes.ok) {
         const errCode = json.error?.details?.[0]?.errorCode;
-        // Remove stale tokens automatically
+        // Remove stale/unregistered tokens automatically
         if (errCode === "UNREGISTERED" || errCode === "INVALID_ARGUMENT") {
+          console.log("[push] removing stale token id", row.id, "errCode:", errCode);
           await db.from("device_push_tokens").delete().eq("id", row.id);
         }
-        throw new Error(json.error?.message ?? `FCM ${res.status}`);
+        throw new Error(json.error?.message ?? `FCM ${fcmRes.status}`);
       }
 
       return json.name;
@@ -188,6 +225,8 @@ export async function POST(req: NextRequest) {
 
   const sent   = results.filter((r) => r.status === "fulfilled").length;
   const failed = results.filter((r) => r.status === "rejected").length;
+
+  console.log("[push] done — sent:", sent, "failed:", failed, "total:", tokens.length);
 
   return NextResponse.json({ sent, failed, total: tokens.length });
 }
