@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "909818651773",
+    "project_id": "thebride-ec626",
+    "storage_bucket": "thebride-ec626.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:909818651773:android:5a3ddd0210148023e2fd14",
+        "android_client_info": {
+          "package_name": "com.goldengroup7.thebride"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIrTwfqwQitT6RDWCZucXOrFpW_XU_wbc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

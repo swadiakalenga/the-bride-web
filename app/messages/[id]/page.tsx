@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { validateUpload } from "../../../lib/validateUpload";
+import { createNotification } from "../../../lib/notificationPush";
 import { useLanguage } from "../../../lib/useLanguage";
 import EmojiPicker from "../../components/ui/EmojiPicker";
 import ImageLightbox from "../../components/ui/ImageLightbox";
@@ -370,12 +371,12 @@ export default function ChatPage() {
       setInput(text);
       setUiMessage(`Failed to send message: ${error.message}`);
     } else if (otherUser?.id) {
-      supabase.from("notifications").insert([{
-        recipient_user_id: otherUser.id,
-        actor_user_id: me,
+      createNotification({
+        recipientUserId: otherUser.id,
+        actorUserId: me,
         type: "message",
-        conversation_id: conversationId,
-      }]).then(() => {});
+        conversationId,
+      });
     }
   };
 
@@ -433,12 +434,12 @@ export default function ChatPage() {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setUiMessage(mediaErrMsg.sendFailed[lang]);
     } else if (otherUser?.id) {
-      supabase.from("notifications").insert([{
-        recipient_user_id: otherUser.id,
-        actor_user_id: me,
+      createNotification({
+        recipientUserId: otherUser.id,
+        actorUserId: me,
         type: "message",
-        conversation_id: conversationId,
-      }]).then(() => {});
+        conversationId,
+      });
     }
   };
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
+import { createNotification } from "../../../lib/notificationPush";
 import BottomNav from "../../components/ui/BottomNav";
 import Card from "../../components/ui/Card";
 import FollowListModal from "../../components/ui/FollowListModal";
@@ -396,11 +397,11 @@ export default function UserProfilePage() {
 
       // Notify recipient of message request
       if (!error) {
-        await supabase.from("notifications").insert([{
-          recipient_user_id: profile.id,
-          actor_user_id: currentUserId,
+        await createNotification({
+          recipientUserId: profile.id,
+          actorUserId: currentUserId,
           type: "message_request",
-        }]);
+        });
       }
 
       setMessagingLoading(false);
@@ -426,13 +427,13 @@ export default function UserProfilePage() {
     }], { onConflict: "church_id,user_id" });
 
     if (!error) {
-      // Notify the church admin; include church_id so the notification links to /church/[id]/members
-      await supabase.from("notifications").insert([{
-        recipient_user_id: profile.id,
-        actor_user_id: currentUserId,
+      // Notify the church admin; church_id links the notification to /church/[id]/members
+      await createNotification({
+        recipientUserId: profile.id,
+        actorUserId: currentUserId,
         type: "membership_request",
-        church_id: profile.church_id,
-      }]);
+        churchId: profile.church_id,
+      });
       setMembershipStatus("pending");
       setUiMessage("Demande d'adhésion envoyée.");
     } else {

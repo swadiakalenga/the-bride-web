@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { useLanguage } from "../../../../lib/useLanguage";
+import { createNotification } from "../../../../lib/notificationPush";
 
 type MemberRow = {
   id: string;
@@ -95,12 +96,12 @@ export default function MembersPage() {
       .eq("id", row.id);
 
     // Notify the user of the outcome
-    await supabase.from("notifications").insert([{
-      recipient_user_id: row.user_id,
-      actor_user_id: currentUserId,
+    await createNotification({
+      recipientUserId: row.user_id,
+      actorUserId: currentUserId,
       type: status === "member" ? "membership_approved" : "membership_rejected",
-      church_id: churchId,
-    }]);
+      churchId,
+    });
 
     setActionLoading(null);
     await loadMembers();
@@ -117,12 +118,12 @@ export default function MembersPage() {
       .eq("id", row.id);
 
     // Notify the user that their membership was revoked
-    await supabase.from("notifications").insert([{
-      recipient_user_id: row.user_id,
-      actor_user_id: currentUserId,
+    await createNotification({
+      recipientUserId: row.user_id,
+      actorUserId: currentUserId,
       type: "membership_rejected",
-      church_id: churchId,
-    }]);
+      churchId,
+    });
 
     setActionLoading(null);
     await loadMembers();
