@@ -41,6 +41,52 @@ export type ChatMessage = {
   failed?: boolean;
 };
 
+export type LiveEventStatus = "scheduled" | "live" | "ended" | "cancelled";
+
+export type LiveEvent = {
+  id: string;
+  church_id: string;
+  created_by: string;
+  title: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  scheduled_for: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  status: LiveEventStatus;
+  stream_input_id: string | null;
+  playback_url: string | null;
+  hls_url: string | null;
+  viewer_count: number;
+  replay_enabled: boolean;
+  created_at: string;
+  // joined from churches
+  church_name?: string | null;
+  church_avatar?: string | null;
+};
+
+export type LiveChatMessage = {
+  id: string;
+  live_event_id: string;
+  user_id: string;
+  message: string;
+  created_at: string;
+  // joined from profiles
+  author_name?: string | null;
+  author_avatar?: string | null;
+  pending?: boolean;
+};
+
+export type LiveReaction = {
+  id: string;
+  live_event_id: string;
+  user_id: string;
+  reaction_type: string;
+  created_at: string;
+};
+
+export const LIVE_REACTION_TYPES = ["🙏", "❤️", "🔥", "✝️", "👏", "🙌", "⭐", "😭"] as const;
+
 export type NotificationType =
   | "follow"
   | "like"
@@ -55,7 +101,9 @@ export type NotificationType =
   | "message_request"
   | "tag"
   | "prayer"
-  | "event";
+  | "event"
+  | "church_live_started"
+  | "church_live_scheduled";
 
 export type NotificationItem = {
   id: string;

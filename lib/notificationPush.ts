@@ -45,9 +45,12 @@ function buildPushPayload(type: string, actorName: string): PushPayload {
     church_verified:     { title: "Church verified ✓",   body: "Your church has been verified" },
     church_rejected:     { title: "Verification update", body: "Your church verification was not approved" },
     // Giving
-    donation_received:   { title: "Donation received",   body: `${n} made a donation` },
-    tithe_received:      { title: "Tithe received",      body: `${n} gave their tithe` },
-    offering_received:   { title: "Offering received",   body: `${n} gave an offering` },
+    donation_received:      { title: "Donation received",   body: `${n} made a donation` },
+    tithe_received:         { title: "Tithe received",      body: `${n} gave their tithe` },
+    offering_received:      { title: "Offering received",   body: `${n} gave an offering` },
+    // Church livestream
+    church_live_started:    { title: "🔴 Your church is live!", body: `Join the stream now` },
+    church_live_scheduled:  { title: "📅 Stream scheduled",     body: `A new live event has been scheduled` },
   };
   return map[type] ?? { title: "TheBride", body: "You have a new notification" };
 }

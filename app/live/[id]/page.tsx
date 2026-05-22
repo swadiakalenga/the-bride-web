@@ -3,603 +3,386 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import type { LiveEvent } from "../../../lib/types";
+import HLSPlayer from "../../components/live/HLSPlayer";
+import LiveChat from "../../components/live/LiveChat";
+import LiveReactions from "../../components/live/LiveReactions";
+import AdminLiveControls from "../../components/live/AdminLiveControls";
+import { useLiveChat } from "../../../lib/hooks/useLiveChat";
+import { useLiveReactions } from "../../../lib/hooks/useLiveReactions";
+import { useViewerTracking } from "../../../lib/hooks/useViewerTracking";
 
-type LiveStream = {
-  id: string;
-  church_id: string;
-  broadcaster_id: string;
-  title: string;
-  status: string;
-  viewer_count: number;
-  started_at: string;
-  recording_url: string | null;
-};
+const EVENT_COLS = `
+  id, church_id, created_by, title, description, thumbnail_url,
+  scheduled_for, started_at, ended_at, status,
+  stream_input_id, playback_url, hls_url,
+  viewer_count, replay_enabled, created_at,
+  churches(name, avatar_url, pastor_name)
+`;
 
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
-};
+type ChurchJoin = { name?: string | null; avatar_url?: string | null; pastor_name?: string | null };
+type LiveEventExt = LiveEvent & { pastor_name?: string | null };
 
-export default function LivePage() {
+function normaliseEvent(row: Record<string, unknown>): LiveEventExt {
+  const church = row.churches as ChurchJoin | null;
+  return {
+    ...(row as Omit<LiveEvent, "church_name" | "church_avatar">),
+    church_name:   church?.name ?? null,
+    church_avatar: church?.avatar_url ?? null,
+    pastor_name:   church?.pastor_name ?? null,
+  } as LiveEventExt;
+}
+
+function formatStarted(dateStr: string | null) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) +
+    " · " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+export default function LiveWatchPage() {
   const params = useParams();
   const router = useRouter();
-  const streamId = params.id as string;
+  const liveEventId = params.id as string;
 
+  const [event, setEvent]                 = useState<LiveEventExt | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [stream, setStream] = useState<LiveStream | null>(null);
-  const [isBroadcaster, setIsBroadcaster] = useState(false);
-  const [isLive, setIsLive] = useState(true);
-  const [viewerCount, setViewerCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [ending, setEnding] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [cameraOff, setCameraOff] = useState(false);
-  const [chatMessages, setChatMessages] = useState<{ sender: string; text: string }[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uiMessage, setUiMessage] = useState("");
+  const [isAdmin, setIsAdmin]             = useState(false);
+  const [loading, setLoading]             = useState(true);
+  const [notFound, setNotFound]           = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
-  const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const signalingRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const metaRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const peerRef = useRef<RTCPeerConnection | null>(null);
-  const meRef = useRef<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // ── Load event ────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    initPage();
-    return () => cleanup();
-  }, [streamId]);
+    if (!liveEventId) return;
+    let mounted = true;
 
-  async function initPage() {
-    const { data: authData } = await supabase.auth.getUser();
-    const me = authData.user?.id;
-    if (!me) { router.push("/login"); return; }
-    setCurrentUserId(me);
-    meRef.current = me;
+    (async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      const me = authData.user?.id ?? null;
+      if (!mounted) return;
+      setCurrentUserId(me);
 
-    const { data: streamData } = await supabase
-      .from("live_streams")
-      .select("*")
-      .eq("id", streamId)
-      .maybeSingle();
+      const { data, error } = await supabase
+        .from("church_live_events")
+        .select(EVENT_COLS)
+        .eq("id", liveEventId)
+        .maybeSingle();
 
-    if (!streamData) {
-      setUiMessage("This stream does not exist or is no longer available.");
-      setLoading(false);
-      return;
-    }
+      if (!mounted) return;
 
-    // Ended stream — show recording if available
-    if (streamData.status === "ended") {
-      setStream(streamData);
-      setIsLive(false);
-      setRecordingUrl(streamData.recording_url || null);
-      setLoading(false);
-      return;
-    }
+      if (error || !data) { setNotFound(true); setLoading(false); return; }
 
-    setStream(streamData);
-    setViewerCount(streamData.viewer_count || 0);
+      const ev = normaliseEvent(data as Record<string, unknown>);
+      setEvent(ev);
 
-    if (streamData.broadcaster_id === me) {
-      setIsBroadcaster(true);
-      await startBroadcasting(me);
-    } else {
-      await startViewing(me);
-    }
-
-    setLoading(false);
-  }
-
-  const startBroadcasting = async (me: string) => {
-    let mediaStream: MediaStream;
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    } catch {
-      setUiMessage("Could not access camera or microphone. Please grant permissions and try again.");
-      setLoading(false);
-      return;
-    }
-
-    localStreamRef.current = mediaStream;
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = mediaStream;
-    }
-    setCameraReady(true);
-
-    // Start recording
-    try {
-      const recorder = new MediaRecorder(mediaStream, { mimeType: "video/webm;codecs=vp8,opus" });
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.start(1000); // collect chunks every 1 second
-      recorderRef.current = recorder;
-    } catch {
-      // Recording not supported — silently continue without it
-    }
-
-    const staleSignal = supabase.getChannels().find((c) => c.topic === `realtime:live-signal-${streamId}`);
-    if (staleSignal) await supabase.removeChannel(staleSignal);
-
-    const channel = supabase.channel(`live-signal-${streamId}`, {
-      config: { broadcast: { self: false } },
-    });
-
-    channel
-      .on("broadcast", { event: "viewer-join" }, async ({ payload }) => {
-        const viewerId: string = payload.viewer_id;
-        if (peersRef.current.has(viewerId)) return;
-
-        const pc = new RTCPeerConnection(ICE_SERVERS);
-        peersRef.current.set(viewerId, pc);
-
-        mediaStream.getTracks().forEach((t) => pc.addTrack(t, mediaStream));
-
-        pc.onicecandidate = (e) => {
-          if (e.candidate) {
-            channel.send({
-              type: "broadcast",
-              event: "ice-bc",
-              payload: { target: viewerId, candidate: e.candidate.toJSON() },
-            });
-          }
-        };
-
-        pc.onconnectionstatechange = () => {
-          if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-            pc.close();
-            peersRef.current.delete(viewerId);
-            const c = peersRef.current.size;
-            setViewerCount(c);
-            supabase.from("live_streams").update({ viewer_count: c }).eq("id", streamId).then(() => {});
-          }
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        channel.send({
-          type: "broadcast",
-          event: "offer",
-          payload: { target: viewerId, sdp: offer.sdp },
-        });
-
-        const c = peersRef.current.size;
-        setViewerCount(c);
-        supabase.from("live_streams").update({ viewer_count: c }).eq("id", streamId).then(() => {});
-      })
-      .on("broadcast", { event: "answer" }, async ({ payload }) => {
-        const pc = peersRef.current.get(payload.viewer_id);
-        if (pc && pc.signalingState === "have-local-offer") {
-          await pc.setRemoteDescription({ type: "answer", sdp: payload.sdp });
+      if (me) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role, church_id")
+          .eq("id", me)
+          .maybeSingle();
+        if (mounted && profile?.role === "church_admin" && profile.church_id === ev.church_id) {
+          setIsAdmin(true);
         }
-      })
-      .on("broadcast", { event: "ice-viewer" }, async ({ payload }) => {
-        const pc = peersRef.current.get(payload.viewer_id);
-        if (pc) await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-      })
-      .on("broadcast", { event: "chat" }, ({ payload }) => {
-        // Broadcaster can see viewer chat messages
-        setChatMessages((prev) => [...prev, { sender: payload.name, text: payload.text }]);
-      })
-      .subscribe();
-
-    signalingRef.current = channel;
-  };
-
-  const startViewing = async (me: string) => {
-    const staleSignal = supabase.getChannels().find((c) => c.topic === `realtime:live-signal-${streamId}`);
-    if (staleSignal) await supabase.removeChannel(staleSignal);
-
-    const channel = supabase.channel(`live-signal-${streamId}`, {
-      config: { broadcast: { self: false } },
-    });
-
-    const pc = new RTCPeerConnection(ICE_SERVERS);
-    peerRef.current = pc;
-
-    pc.ontrack = (e) => {
-      if (remoteVideoRef.current && e.streams[0]) {
-        remoteVideoRef.current.srcObject = e.streams[0];
       }
-    };
 
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        channel.send({
-          type: "broadcast",
-          event: "ice-viewer",
-          payload: { viewer_id: me, candidate: e.candidate.toJSON() },
-        });
-      }
-    };
+      setLoading(false);
+    })();
 
-    channel
-      .on("broadcast", { event: "offer" }, async ({ payload }) => {
-        if (payload.target !== me) return;
-        await pc.setRemoteDescription({ type: "offer", sdp: payload.sdp });
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        channel.send({
-          type: "broadcast",
-          event: "answer",
-          payload: { viewer_id: me, sdp: answer.sdp },
-        });
-      })
-      .on("broadcast", { event: "ice-bc" }, async ({ payload }) => {
-        if (payload.target !== me) return;
-        if (pc.remoteDescription) {
-          await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-        }
-      })
-      .on("broadcast", { event: "stream-ended" }, () => {
-        setIsLive(false);
-        // Reload to get recording_url if available
-        supabase.from("live_streams").select("recording_url").eq("id", streamId).maybeSingle().then(({ data }) => {
-          setRecordingUrl(data?.recording_url || null);
-        });
-      })
-      .on("broadcast", { event: "chat" }, ({ payload }) => {
-        setChatMessages((prev) => [...prev, { sender: payload.name, text: payload.text }]);
-      })
-      .subscribe(() => {
-        channel.send({
-          type: "broadcast",
-          event: "viewer-join",
-          payload: { viewer_id: me },
-        });
-      });
+    return () => { mounted = false; };
+  }, [liveEventId]);
 
-    signalingRef.current = channel;
+  // ── Realtime: event status / viewer_count updates ────────────────────────
 
-    const stale = supabase.getChannels().find((c) => c.topic === `realtime:live-meta-${streamId}`);
-    if (stale) await supabase.removeChannel(stale);
+  useEffect(() => {
+    if (!liveEventId) return;
 
-    const meta = supabase
-      .channel(`live-meta-${streamId}`)
+    if (eventChannelRef.current) supabase.removeChannel(eventChannelRef.current);
+
+    const channel = supabase
+      .channel(`live-event-watch-${liveEventId}-${Date.now()}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "live_streams", filter: `id=eq.${streamId}` },
+        { event: "UPDATE", schema: "public", table: "church_live_events", filter: `id=eq.${liveEventId}` },
         (payload) => {
-          const row = payload.new as LiveStream;
-          setViewerCount(row.viewer_count);
-          if (row.status === "ended") {
-            setIsLive(false);
-            setRecordingUrl(row.recording_url || null);
-          }
-        }
+          setEvent((prev) => prev ? { ...prev, ...(payload.new as Partial<LiveEvent>) } : prev);
+        },
       )
       .subscribe();
 
-    metaRef.current = meta;
-  };
+    eventChannelRef.current = channel;
 
-  const endStream = async () => {
-    if (ending) return;
-    setEnding(true);
-
-    // Notify viewers immediately
-    try {
-      signalingRef.current?.send({
-        type: "broadcast",
-        event: "stream-ended",
-        payload: {},
-      });
-    } catch { /* ignore */ }
-
-    // Try to stop recording with a 10s timeout — never block ending
-    let recUrl: string | null = null;
-    try {
-      if (recorderRef.current && recorderRef.current.state !== "inactive") {
-        setUploading(true);
-        recUrl = await Promise.race([
-          stopAndUploadRecording(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
-        ]);
-        setUploading(false);
-      }
-    } catch {
-      recUrl = null;
-      setUploading(false);
-    }
-
-    // Update DB — retry once if it fails
-    const updatePayload = {
-      status: "ended",
-      ended_at: new Date().toISOString(),
-      viewer_count: 0,
-      ...(recUrl ? { recording_url: recUrl } : {}),
+    return () => {
+      if (eventChannelRef.current) supabase.removeChannel(eventChannelRef.current);
     };
+  }, [liveEventId]);
 
-    let { error: updateError } = await supabase
-      .from("live_streams")
-      .update(updatePayload)
-      .eq("id", streamId);
+  // ── Capacitor app resume ──────────────────────────────────────────────────
 
-    if (updateError) {
-      // Retry once
-      const retry = await supabase
-        .from("live_streams")
-        .update(updatePayload)
-        .eq("id", streamId);
-      updateError = retry.error;
-    }
+  useEffect(() => {
+    let removeListener: (() => void) | undefined;
 
-    cleanup();
-
-    if (updateError) {
-      setUiMessage("Stream ended locally, but the server update failed. Please return to the feed and refresh if the live badge remains visible.");
-      setEnding(false);
-      return;
-    }
-
-    router.push("/feed");
-  };
-
-  const stopAndUploadRecording = (): Promise<string | null> => {
-    return new Promise((resolve) => {
-      const recorder = recorderRef.current;
-      if (!recorder || recorder.state === "inactive") { resolve(null); return; }
-
-      let resolved = false;
-      const done = (url: string | null) => {
-        if (resolved) return;
-        resolved = true;
-        resolve(url);
-      };
-
-      // Fallback if onstop never fires
-      setTimeout(() => done(null), 8000);
-
-      recorder.onstop = async () => {
-        try {
-          const blob = new Blob(chunksRef.current, { type: "video/webm" });
-          if (blob.size === 0) { done(null); return; }
-
-          const path = `recordings/${streamId}-${Date.now()}.webm`;
-          const { error } = await supabase.storage.from("media").upload(path, blob, { contentType: "video/webm" });
-          if (error) { done(null); return; }
-
-          const { data } = supabase.storage.from("media").getPublicUrl(path);
-          done(data.publicUrl);
-        } catch {
-          done(null);
-        }
-      };
-
+    (async () => {
       try {
-        recorder.stop();
-      } catch {
-        done(null);
-      }
-    });
-  };
+        const { App: CapApp } = await import("@capacitor/app");
+        const handle = await CapApp.addListener("appStateChange", async ({ isActive }) => {
+          if (!isActive || !liveEventId) return;
+          const { data } = await supabase
+            .from("church_live_events")
+            .select("status, viewer_count, hls_url, started_at, ended_at")
+            .eq("id", liveEventId)
+            .maybeSingle();
+          if (data) setEvent((prev) => prev ? { ...prev, ...data } : prev);
+        });
+        removeListener = () => handle.remove();
+      } catch { /* web — no Capacitor */ }
+    })();
 
-  const toggleMute = () => {
-    localStreamRef.current?.getAudioTracks().forEach((t) => {
-      t.enabled = !t.enabled;
-    });
-    setIsMuted((m) => !m);
-  };
+    return () => removeListener?.();
+  }, [liveEventId]);
 
-  const toggleCamera = () => {
-    localStreamRef.current?.getVideoTracks().forEach((t) => {
-      t.enabled = !t.enabled;
-    });
-    setCameraOff((c) => !c);
-  };
+  // ── Module hooks ─────────────────────────────────────────────────────────
 
-  const sendChat = async () => {
-    if (!chatInput.trim() || !currentUserId || isBroadcaster) return;
-    const { data: p } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", currentUserId)
-      .maybeSingle();
+  const { messages, sending, sendMessage } = useLiveChat(liveEventId, currentUserId);
+  const { floatingReactions, sendReaction } = useLiveReactions(liveEventId, currentUserId);
+  const { viewerCount } = useViewerTracking(liveEventId, currentUserId);
 
-    signalingRef.current?.send({
-      type: "broadcast",
-      event: "chat",
-      payload: { name: p?.full_name || "Someone", text: chatInput.trim() },
-    });
-
-    setChatMessages((prev) => [...prev, { sender: p?.full_name || "You", text: chatInput.trim() }]);
-    setChatInput("");
-  };
-
-  function cleanup() {
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    peersRef.current.forEach((pc) => pc.close());
-    peersRef.current.clear();
-    peerRef.current?.close();
-    if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop();
-    if (signalingRef.current) supabase.removeChannel(signalingRef.current);
-    if (metaRef.current) supabase.removeChannel(metaRef.current);
-  }
+  // ── States ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-black">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-red-500 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-amber-400 border-t-transparent" />
       </div>
     );
   }
 
-  if (uiMessage && !stream) {
+  if (notFound || !event) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-black px-6 text-center text-white">
-        <p className="max-w-sm text-sm text-gray-200">{uiMessage}</p>
+      <div className="flex h-screen flex-col items-center justify-center bg-black gap-4">
+        <span className="text-5xl">📡</span>
+        <p className="text-lg font-bold text-white">Stream not found</p>
         <button
-          onClick={() => router.push("/feed")}
-          className="rounded-full bg-white px-6 py-2 text-sm font-semibold text-black"
+          onClick={() => router.push("/live")}
+          className="rounded-full bg-amber-400 px-5 py-2 text-sm font-bold text-white hover:bg-amber-500"
         >
-          Back to Feed
+          Browse streams
         </button>
       </div>
     );
   }
 
-  // Stream ended — show recording or ended screen
-  if (!isLive && !isBroadcaster) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-black text-white px-6">
-        <div className="text-5xl">{recordingUrl ? "🎬" : "📺"}</div>
-        <p className="text-xl font-bold">{recordingUrl ? stream?.title || "Stream Recording" : "Stream has ended"}</p>
-
-        {recordingUrl ? (
-          <div className="w-full max-w-md">
-            <video
-              src={recordingUrl}
-              controls
-              className="w-full rounded-2xl bg-gray-900"
-              style={{ maxHeight: "60vh" }}
-            />
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400">The recording is not available.</p>
-        )}
-
-        <button
-          onClick={() => router.push("/feed")}
-          className="mt-2 rounded-full bg-white px-6 py-2 text-sm font-semibold text-black"
-        >
-          Back to Feed
-        </button>
-      </div>
-    );
-  }
+  const isLive    = event.status === "live";
+  const isEnded   = event.status === "ended";
+  const hasPlayer = !!event.hls_url && (isLive || (isEnded && event.replay_enabled));
 
   return (
-    <div className="flex h-screen flex-col bg-black text-white">
-      {uiMessage && (
-        <div className="bg-red-600 px-4 py-2 text-center text-sm font-semibold text-white">
-          {uiMessage}
-        </div>
-      )}
+    <div className="flex h-screen flex-col bg-black lg:flex-row">
 
-      {/* Video area */}
-      <div className="relative flex-1 bg-black">
-        {isBroadcaster ? (
-          <video
-            ref={localVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="h-full w-full object-cover"
-          />
-        )}
+      {/* ── Main: player + info ── */}
+      <div className="flex flex-1 min-h-0 flex-col">
 
-        {/* Top bar */}
-        <div className="absolute left-0 right-0 top-0 flex items-center justify-between px-4 py-4" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)" }}>
-          <button
-            onClick={() => router.push("/feed")}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
+        {/* Back */}
+        <button
+          onClick={() => router.push("/live")}
+          className="absolute left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm hover:bg-black/70"
+          aria-label="Back"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
 
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 rounded-full bg-red-600 px-3 py-1 text-xs font-bold">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-              LIVE
-            </span>
-            <span className="flex items-center gap-1 rounded-full bg-black/50 px-3 py-1 text-xs font-semibold">
-              👁 {viewerCount}
-            </span>
+        {/* Player */}
+        <div className="relative w-full flex-shrink-0 bg-black">
+          {hasPlayer ? (
+            <HLSPlayer hlsUrl={event.hls_url!} poster={event.thumbnail_url} autoPlay={isLive} />
+          ) : (
+            <div className="flex flex-col items-center justify-center text-white" style={{ aspectRatio: "16/9" }}>
+              {event.status === "scheduled" ? (
+                <>
+                  <span className="text-5xl mb-3">📅</span>
+                  <p className="text-lg font-bold">Stream hasn&apos;t started yet</p>
+                  {event.scheduled_for && (
+                    <p className="mt-1 text-sm text-gray-400">
+                      Scheduled for {formatStarted(event.scheduled_for)}
+                    </p>
+                  )}
+                </>
+              ) : event.status === "ended" && !event.replay_enabled ? (
+                <>
+                  <span className="text-5xl mb-3">🎬</span>
+                  <p className="text-lg font-bold">Stream ended</p>
+                  <p className="mt-1 text-sm text-gray-400">Replay not available.</p>
+                </>
+              ) : (
+                <>
+                  <span className="text-5xl mb-3">📡</span>
+                  <p className="text-lg font-bold">Stream unavailable</p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Floating reactions on player (pointers go through) */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            {floatingReactions.map((r) => (
+              <div
+                key={r.key}
+                className="absolute bottom-0 text-2xl"
+                style={{
+                  right: `${r.x}%`,
+                  animation: "floatUp 2.8s ease-out forwards",
+                }}
+              >
+                {r.reaction_type}
+              </div>
+            ))}
           </div>
 
-          {isBroadcaster && (
+          {/* Badges */}
+          <div className="absolute left-3 bottom-12 flex items-center gap-2 z-10">
+            {isLive && (
+              <span className="flex items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow">
+                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                Live
+              </span>
+            )}
+            {isEnded && event.replay_enabled && (
+              <span className="rounded-full bg-gray-700/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow">
+                Replay
+              </span>
+            )}
+            {viewerCount > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                </svg>
+                {viewerCount.toLocaleString()}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Reactions bar — mobile only, above info */}
+        {isLive && currentUserId && (
+          <div className="flex-shrink-0 bg-black/90 lg:hidden">
+            <LiveReactions
+              floatingReactions={[]}
+              onReact={sendReaction}
+              disabled={!currentUserId}
+            />
+          </div>
+        )}
+
+        {/* Info */}
+        <div className="flex-1 overflow-y-auto bg-gray-900 px-4 py-4 space-y-4">
+          <div>
+            <h1 className="text-lg font-bold leading-snug text-white">{event.title}</h1>
             <button
-              onClick={endStream}
-              disabled={ending || uploading}
-              className="rounded-full bg-red-600 px-4 py-1.5 text-xs font-bold"
+              onClick={() => router.push(`/church/${event.church_id}`)}
+              className="mt-2 flex items-center gap-2.5"
             >
-              {uploading ? "Saving..." : ending ? "Ending..." : "End"}
+              {event.church_avatar ? (
+                <img src={event.church_avatar} alt="" className="h-9 w-9 rounded-full object-cover flex-shrink-0" />
+              ) : (
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-sm font-bold text-white">
+                  {(event.church_name || "C").charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="text-left">
+                <p className="text-sm font-semibold text-white">{event.church_name}</p>
+                {event.pastor_name && (
+                  <p className="text-[11px] text-gray-400">Pastor {event.pastor_name}</p>
+                )}
+              </div>
             </button>
-          )}
-        </div>
+          </div>
 
-        {/* Stream title */}
-        <div className="absolute left-4 top-16">
-          <p className="rounded-full bg-black/50 px-3 py-1 text-sm font-semibold">
-            {stream?.title}
-          </p>
-        </div>
-
-        {/* Chat overlay — everyone sees chat */}
-        <div className="absolute bottom-24 left-0 right-0 max-h-48 overflow-y-auto px-4 space-y-1">
-          {chatMessages.slice(-20).map((m, i) => (
-            <div key={i} className="inline-flex max-w-[80%] rounded-2xl bg-black/50 px-3 py-1.5">
-              <span className="mr-1.5 text-xs font-bold text-brand-300">{m.sender}:</span>
-              <span className="text-xs text-white">{m.text}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Bottom controls */}
-        <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 pt-4" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
-
-          {/* Chat input — viewers only */}
-          {!isBroadcaster && (
-            <div className="mb-3 flex gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") sendChat(); }}
-                placeholder="Say something..."
-                className="flex-1 rounded-full bg-white/20 px-4 py-2 text-sm text-white placeholder-white/60 outline-none focus:bg-white/30"
-              />
-              <button
-                onClick={sendChat}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-              </button>
-            </div>
+          {event.description && (
+            <p className="text-sm leading-relaxed text-gray-300">{event.description}</p>
           )}
 
-          {/* Broadcaster controls */}
-          {isBroadcaster && (
-            <div className="flex justify-center gap-6">
-              <button
-                onClick={toggleMute}
-                className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-full text-xs font-medium ${isMuted ? "bg-red-500" : "bg-white/20"}`}
-              >
-                <span className="text-xl">{isMuted ? "🔇" : "🎤"}</span>
-                <span className="text-[10px]">{isMuted ? "Unmute" : "Mute"}</span>
-              </button>
-              <button
-                onClick={toggleCamera}
-                className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-full text-xs font-medium ${cameraOff ? "bg-red-500" : "bg-white/20"}`}
-              >
-                <span className="text-xl">{cameraOff ? "📵" : "📹"}</span>
-                <span className="text-[10px]">{cameraOff ? "Show" : "Camera"}</span>
-              </button>
-            </div>
+          {event.started_at && (
+            <p className="text-xs text-gray-500">
+              {isEnded ? "Streamed" : "Started"} {formatStarted(event.started_at)}
+            </p>
           )}
+
+          {isAdmin && (
+            <AdminLiveControls
+              event={event}
+              onEventUpdated={(updated) => setEvent((prev) => prev ? { ...prev, ...updated } : prev)}
+            />
+          )}
+
+          {/* Mobile chat toggle */}
+          <button
+            onClick={() => setMobileChatOpen(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white hover:bg-white/5 lg:hidden"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+            </svg>
+            {isLive ? "Open live chat" : "View chat"}
+            {messages.length > 0 && (
+              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                {messages.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* ── Desktop chat sidebar ── */}
+      <div className="hidden w-80 flex-shrink-0 flex-col border-l border-white/10 bg-gray-900 lg:flex">
+        {isLive && currentUserId && (
+          <div className="flex-shrink-0 border-b border-white/10">
+            <LiveReactions
+              floatingReactions={[]}
+              onReact={sendReaction}
+              disabled={!currentUserId}
+            />
+          </div>
+        )}
+        <LiveChat
+          messages={messages}
+          sending={sending}
+          currentUserId={currentUserId}
+          onSend={sendMessage}
+          className="flex-1 min-h-0"
+        />
+      </div>
+
+      {/* ── Mobile chat drawer ── */}
+      {mobileChatOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-900 lg:hidden">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <span className="text-sm font-bold text-white">
+              {isLive ? "Live Chat" : "Chat replay"}
+            </span>
+            <button
+              onClick={() => setMobileChatOpen(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/10"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <LiveChat
+            messages={messages}
+            sending={sending}
+            currentUserId={currentUserId}
+            onSend={sendMessage}
+            className="flex-1 min-h-0"
+          />
+        </div>
+      )}
     </div>
   );
 }
