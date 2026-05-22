@@ -38,6 +38,7 @@ export type ChatMessage = {
   media_url?: string | null;
   media_type?: string | null; // 'image' | 'video' | 'audio'
   pending?: boolean;
+  failed?: boolean;
 };
 
 export type NotificationType =

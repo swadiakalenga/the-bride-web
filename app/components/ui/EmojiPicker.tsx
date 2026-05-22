@@ -16,12 +16,15 @@ type EmojiPickerProps = {
   onClose: () => void;
 };
 
+// Positioned by the parent — this component renders as a plain block (no absolute).
+// The parent in messages/[id]/page.tsx uses `fixed` so the picker is always
+// clamped inside the viewport regardless of screen size.
 export default function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   const [activeCategory, setActiveCategory] = useState("Faith");
   const categories = Object.keys(EMOJI_CATEGORIES);
 
   return (
-    <div className="absolute bottom-12 left-0 z-50 w-72 rounded-2xl border border-gray-200 bg-white shadow-xl">
+    <div className="w-72 rounded-2xl border border-gray-200 bg-white shadow-xl" style={{ maxWidth: "calc(100vw - 24px)" }}>
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
         <span className="text-xs font-semibold text-gray-500">Emoji</span>
@@ -50,8 +53,8 @@ export default function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
         ))}
       </div>
 
-      {/* Emoji grid */}
-      <div className="grid grid-cols-8 gap-0.5 p-2" style={{ maxHeight: "160px", overflowY: "auto" }}>
+      {/* Emoji grid — scrollable, max 45 vh so it never pushes off-screen */}
+      <div className="grid grid-cols-8 gap-0.5 overflow-y-auto p-2" style={{ maxHeight: "45vh" }}>
         {EMOJI_CATEGORIES[activeCategory]?.map((emoji) => (
           <button
             key={emoji}
