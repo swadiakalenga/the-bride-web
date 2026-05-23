@@ -6,6 +6,14 @@ import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
 import BottomNav from "../../components/ui/BottomNav";
 
+type ReplayCard = {
+  id: string;
+  title: string;
+  thumbnail_url: string | null;
+  ended_at: string | null;
+  hls_url: string | null;
+};
+
 type ChurchInfo = {
   id: string;
   name: string;
@@ -44,6 +52,9 @@ export default function ChurchProfilePage() {
   const [blockLoading, setBlockLoading] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [debugError,   setDebugError]   = useState<string | null>(null);
+
+  // Replay cards (recent ended streams)
+  const [recentReplays, setRecentReplays] = useState<ReplayCard[]>([]);
 
   // Image upload state (admin only)
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -105,6 +116,19 @@ export default function ChurchProfilePage() {
     }
     setMemberCount(count || 0);
     setIsBlocked(!!blockRow);
+
+    // Load recent replays for this church (public — no stream_key selected)
+    const { data: replayData } = await supabase
+      .from("church_live_events")
+      .select("id, title, thumbnail_url, ended_at, hls_url")
+      .eq("church_id", churchId)
+      .eq("status", "ended")
+      .eq("replay_enabled", true)
+      .not("hls_url", "is", null)
+      .order("ended_at", { ascending: false })
+      .limit(6);
+
+    setRecentReplays((replayData ?? []) as ReplayCard[]);
 
     setLoading(false);
   }
@@ -193,6 +217,7 @@ export default function ChurchProfilePage() {
 
   if (isAdmin) {
     sectionLinks.push(
+      { icon: "📺", label: isFr ? "Gérer le live" : "Manage Live", description: isFr ? "Planifier, diffuser en direct, gérer les replays" : "Schedule, go live, and manage replays", href: `/church/${churchId}/live/manage` },
       { icon: "👥", label: isFr ? "Gérer les membres" : "Manage Members", description: isFr ? "Approuver les demandes" : "Approve requests & view members", href: `/church/${churchId}/members` },
       { icon: "✅", label: isFr ? "Vérification" : "Verification", description: isFr ? "Soumettre les documents de localisation" : "Submit location proof documents", href: `/church/${churchId}/verify` },
       { icon: "💳", label: isFr ? "Versements" : "Payouts", description: isFr ? "Configurer les versements" : "Set up payout information", href: `/church/${churchId}/payouts` },
@@ -293,9 +318,25 @@ export default function ChurchProfilePage() {
                 {/* Action buttons */}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {isAdmin ? (
-                    <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-600">
-                      {isFr ? "Admin de l'église" : "Church Admin"}
-                    </div>
+                    <>
+                      <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-600">
+                        {isFr ? "Admin de l'église" : "Church Admin"}
+                      </div>
+                      <button
+                        onClick={() => router.push(`/church/${churchId}/live/manage`)}
+                        className="flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+                      >
+                        <span>📺</span>
+                        {isFr ? "Gérer le live" : "Manage Live"}
+                      </button>
+                      <button
+                        onClick={() => router.push(`/live/create?church=${churchId}`)}
+                        className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-100"
+                      >
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                        {isFr ? "Planifier un live" : "Schedule Stream"}
+                      </button>
+                    </>
                   ) : viewerRole === "church_admin" ? (
                     /* Church accounts do not follow/join personal churches as personal users */
                     <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2 text-xs text-gray-500 max-w-xs">
@@ -387,6 +428,70 @@ export default function ChurchProfilePage() {
                 </button>
               ))}
             </div>
+
+            {/* Recent Replays */}
+            {recentReplays.length > 0 && (
+              <div className="px-4 pt-6 pb-2">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                    <span>🎬</span>
+                    {isFr ? "Replays récents" : "Recent Replays"}
+                  </h3>
+                  <button
+                    onClick={() => router.push("/live")}
+                    className="text-xs font-semibold text-amber-600 hover:text-amber-700"
+                  >
+                    {isFr ? "Voir tout" : "See all"}
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {recentReplays.map((replay) => (
+                    <button
+                      key={replay.id}
+                      onClick={() => router.push(`/live/${replay.id}`)}
+                      className="flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm hover:shadow-md transition"
+                    >
+                      {/* Thumbnail */}
+                      <div className="relative h-14 w-24 flex-shrink-0 overflow-hidden rounded-xl bg-gray-900">
+                        {replay.thumbnail_url ? (
+                          <img
+                            src={replay.thumbnail_url}
+                            alt={replay.title}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xl opacity-30">
+                            📡
+                          </div>
+                        )}
+                        <span className="absolute left-1.5 top-1.5 rounded-full bg-gray-700/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                          Replay
+                        </span>
+                      </div>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="line-clamp-2 text-xs font-semibold leading-snug text-gray-900">
+                          {replay.title}
+                        </p>
+                        {replay.ended_at && (
+                          <p className="mt-0.5 text-[11px] text-gray-400">
+                            {new Date(replay.ended_at).toLocaleDateString([], {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </p>
+                        )}
+                      </div>
+                      {/* Watch arrow */}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-gray-300">
+                        <path d="M9 18l6-6-6-6"/>
+                      </svg>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
