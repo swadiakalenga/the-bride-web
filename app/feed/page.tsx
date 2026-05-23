@@ -311,17 +311,17 @@ export default function Feed() {
     if (me?.role === "church_admin" && me?.church_id) {
       setFeedType("church");
       const { data: activeStream } = await supabase
-        .from("live_streams")
+        .from("church_live_events")
         .select("id")
-        .eq("broadcaster_id", uid)
+        .eq("created_by", uid)
         .eq("status", "live")
         .maybeSingle();
 
       if (activeStream) {
         // Auto-end stale stream — if user is here (not on live page), stream should be ended
         await supabase
-          .from("live_streams")
-          .update({ status: "ended", ended_at: new Date().toISOString(), viewer_count: 0 })
+          .from("church_live_events")
+          .update({ status: "ended", ended_at: new Date().toISOString() })
           .eq("id", activeStream.id);
         setMyActiveStreamId(null);
       } else {
@@ -813,7 +813,7 @@ export default function Feed() {
     if (uniqueIds.length === 0) { setLiveStreams([]); return; }
 
     const { data: streams } = await supabase
-      .from("live_streams")
+      .from("church_live_events")
       .select("id, title, church_id, viewer_count")
       .in("church_id", uniqueIds)
       .eq("status", "live")
@@ -856,12 +856,13 @@ export default function Feed() {
     setStartingLive(true);
 
     const { data, error } = await supabase
-      .from("live_streams")
+      .from("church_live_events")
       .insert([{
         church_id: myProfile.church_id,
-        broadcaster_id: currentUserId,
+        created_by: currentUserId,
         title: liveTitle.trim(),
         status: "live",
+        started_at: new Date().toISOString(),
       }])
       .select("id")
       .single();

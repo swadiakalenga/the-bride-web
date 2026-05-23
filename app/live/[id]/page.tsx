@@ -219,6 +219,18 @@ export default function LiveWatchPage() {
                   <p className="text-lg font-bold">Stream ended</p>
                   <p className="mt-1 text-sm text-gray-400">Replay not available.</p>
                 </>
+              ) : isLive ? (
+                <>
+                  <span className="text-5xl mb-3">📡</span>
+                  <p className="text-lg font-bold text-white">Stream is live but video is still connecting.</p>
+                  <p className="mt-1 text-sm text-gray-400">Refresh in a moment — the stream will appear shortly.</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="mt-4 rounded-full bg-amber-400 px-5 py-2 text-sm font-bold text-white hover:bg-amber-500"
+                  >
+                    Refresh
+                  </button>
+                </>
               ) : (
                 <>
                   <span className="text-5xl mb-3">📡</span>
