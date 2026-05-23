@@ -17,6 +17,7 @@ const EVENT_COLS = `
   scheduled_for, started_at, ended_at, status,
   stream_input_id, playback_url, hls_url,
   viewer_count, replay_enabled, created_at,
+  stream_key, provider, playback_id,
   churches(name, avatar_url, pastor_name)
 `;
 

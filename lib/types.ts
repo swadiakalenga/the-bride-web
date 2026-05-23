@@ -60,6 +60,10 @@ export type LiveEvent = {
   viewer_count: number;
   replay_enabled: boolean;
   created_at: string;
+  // Mux-specific fields (added by migration supabase-mux-live-automation.sql)
+  stream_key?: string | null;
+  provider?: string | null;
+  playback_id?: string | null;
   // joined from churches
   church_name?: string | null;
   church_avatar?: string | null;
