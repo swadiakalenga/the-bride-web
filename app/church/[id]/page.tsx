@@ -42,6 +42,11 @@ export default function ChurchProfilePage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [viewerRole,   setViewerRole]   = useState<string | null>(null);
   const [isAdmin,      setIsAdmin]      = useState(false);
+
+  // Raw profile values kept separately for the dev debug panel and for
+  // any logic that needs them independently of the isAdmin derived flag.
+  const [dbProfileRole,    setDbProfileRole]    = useState<string | null>(null);
+  const [dbProfileChurchId, setDbProfileChurchId] = useState<string | null>(null);
   const [isMember,     setIsMember]     = useState(false);
   const [memberCount,  setMemberCount]  = useState(0);
   const [pendingRequest, setPendingRequest] = useState(false);
@@ -87,8 +92,21 @@ export default function ChurchProfilePage() {
       .eq("id", me)
       .maybeSingle();
 
-    setViewerRole(profile?.role ?? null);
-    setIsAdmin(profile?.role === "church_admin" && profile?.church_id === churchId);
+    const rawRole     = profile?.role ?? null;
+    const rawChurchId = profile?.church_id ?? null;
+
+    setViewerRole(rawRole);
+    setDbProfileRole(rawRole);
+    setDbProfileChurchId(rawChurchId);
+
+    // Trim both sides to guard against whitespace / copy-paste artefacts in the DB.
+    // Only grant admin when role AND church_id both match this exact church.
+    const adminOfThisChurch =
+      rawRole === "church_admin" &&
+      rawChurchId != null &&
+      rawChurchId.trim() === churchId.trim();
+
+    setIsAdmin(adminOfThisChurch);
 
     const [{ data: membership }, { count }, { data: blockRow }] = await Promise.all([
       supabase
@@ -205,9 +223,6 @@ export default function ChurchProfilePage() {
         .filter(Boolean).join(", ") || church?.location || null
     : church?.location || null;
 
-  // Church admins acting as church accounts should not follow personal users — viewer is church_admin of THIS church
-  const viewerIsThisChurchAdmin = isAdmin;
-
   const sectionLinks = [
     { icon: "🙏", label: isFr ? "Mur de prière" : "Prayer Wall", description: isFr ? "Partagez des requêtes de prière" : "Share and support prayer requests", href: `/church/${churchId}/prayers` },
     { icon: "📅", label: isFr ? "Événements" : "Events", description: isFr ? "Événements à venir" : "Upcoming church events", href: `/church/${churchId}/events` },
@@ -315,6 +330,32 @@ export default function ChurchProfilePage() {
                   <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{uploadError}</div>
                 )}
 
+                {/* ── Dev-only admin debug panel ─────────────────────────────
+                    Shows raw DB values so you can diagnose isAdmin failures.
+                    Automatically hidden in production (NODE_ENV !== development).
+                ──────────────────────────────────────────────────────────── */}
+                {process.env.NODE_ENV === "development" && (
+                  <div className="mt-3 rounded-xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-[11px] font-mono space-y-0.5 text-yellow-900">
+                    <p className="mb-1 font-bold text-yellow-800 text-xs">🛠 Admin check (dev only)</p>
+                    <p>profile.role &nbsp;&nbsp;&nbsp;&nbsp;= <span className="font-bold">{dbProfileRole ?? "null"}</span></p>
+                    <p>profile.church_id = <span className="font-bold">{dbProfileChurchId ?? "null"}</span></p>
+                    <p>church.id (url) &nbsp;= <span className="font-bold">{churchId}</span></p>
+                    <p>church.id (db) &nbsp;&nbsp;= <span className="font-bold">{church?.id ?? "null"}</span></p>
+                    <p>
+                      IDs match &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;={" "}
+                      <span className={`font-bold ${dbProfileChurchId?.trim() === churchId.trim() ? "text-green-700" : "text-red-700"}`}>
+                        {String(dbProfileChurchId?.trim() === churchId.trim())}
+                      </span>
+                    </p>
+                    <p>
+                      isAdmin &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;={" "}
+                      <span className={`font-bold ${isAdmin ? "text-green-700" : "text-red-700"}`}>
+                        {String(isAdmin)}
+                      </span>
+                    </p>
+                  </div>
+                )}
+
                 {/* Action buttons */}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {isAdmin ? (
@@ -329,16 +370,9 @@ export default function ChurchProfilePage() {
                         <span>📺</span>
                         {isFr ? "Gérer le live" : "Manage Live"}
                       </button>
-                      <button
-                        onClick={() => router.push(`/live/create?church=${churchId}`)}
-                        className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-100"
-                      >
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-                        {isFr ? "Planifier un live" : "Schedule Stream"}
-                      </button>
                     </>
-                  ) : viewerRole === "church_admin" ? (
-                    /* Church accounts do not follow/join personal churches as personal users */
+                  ) : viewerRole === "church_admin" && !isAdmin ? (
+                    /* A church admin viewing a DIFFERENT church — they can't join/follow as a member */
                     <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2 text-xs text-gray-500 max-w-xs">
                       {t("church_account_no_follow")}
                     </div>
