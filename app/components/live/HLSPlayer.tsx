@@ -114,7 +114,10 @@ export default function HLSPlayer({ hlsUrl, poster, autoPlay = true, onError }: 
         onWaiting={() => setState("loading")}
         onPlaying={() => setState("playing")}
         onEnded={() => setState("ended")}
-        onError={() => setState("error")}
+        onError={(e) => {
+          const err = (e.target as HTMLVideoElement).error;
+          if (err && err.code !== MediaError.MEDIA_ERR_ABORTED) setState("error");
+        }}
       />
 
       {/* Loading spinner */}

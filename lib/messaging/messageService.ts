@@ -21,7 +21,6 @@ export async function loadLatestMessages(
   }
 
   const msgs = ((data ?? []).reverse()) as ChatMessage[];
-  console.log(`[message-module] initial load: ${msgs.length} messages`);
   return msgs;
 }
 

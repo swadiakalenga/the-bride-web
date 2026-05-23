@@ -385,8 +385,8 @@ export default function Feed() {
     const end = start + FEED_PAGE_SIZE - 1;
 
     let postList: Post[] = [];
-    let newSharedByMap: Record<string, { userId: string; sharedAt: string }> = {};
-    let sharerIds: string[] = [];
+    const newSharedByMap: Record<string, { userId: string; sharedAt: string }> = {};
+    const sharerIds: string[] = [];
 
     if (feedType === "people") {
       const { data: followsData, error: followError } = await supabase
@@ -732,7 +732,6 @@ export default function Feed() {
     const ext = file.name.split(".").pop() || "bin";
     const mime = file.type || "application/octet-stream";
     const path = `${folder}/${userId}-${Date.now()}.${ext}`;
-    console.log(`[upload] ${folder}:`, { path, mime, size: file.size, name: file.name });
     try {
       const { error } = await withUploadTimeout(
         supabase.storage.from("media").upload(path, file, { contentType: mime }),
@@ -763,7 +762,6 @@ export default function Feed() {
         const ext = file.name.split(".").pop() || "jpg";
         const mime = file.type || "image/jpeg";
         const path = `posts/${userId}-${ts}-${i}.${ext}`;
-        console.log(`[upload] image ${i}:`, { path, mime, size: file.size, name: file.name });
         try {
           const { error } = await withUploadTimeout(
             supabase.storage.from("media").upload(path, file, { contentType: mime }),
@@ -785,7 +783,6 @@ export default function Feed() {
 
     const failed = results.filter((r) => r.error);
     const succeeded = results.filter((r) => r.url);
-    console.log(`[upload] images: ${succeeded.length} ok, ${failed.length} failed`);
 
     if (failed.length > 0 && succeeded.length === 0) {
       // All failed — block the post.
@@ -967,7 +964,6 @@ export default function Feed() {
       postPayload.tagged_user_ids = taggedUsers.map((u) => u.id);
     }
 
-    console.log("[createPost] payload:", JSON.stringify(postPayload));
     const { error } = await supabase.from("posts").insert([postPayload]);
 
     if (error) {
@@ -1530,7 +1526,7 @@ export default function Feed() {
           </aside>
 
           {/* Center feed */}
-          <section className="col-span-12 lg:col-span-6">
+          <section className="col-span-12 lg:col-span-6 min-w-0 overflow-hidden">
         {uiMessage && (
           <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
             {uiMessage}
@@ -1915,10 +1911,10 @@ export default function Feed() {
                       </span>
                     </div>
                   )}
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
                     {renderAvatar(post.user_id, post.author_name, "h-11 w-11")}
 
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <button onClick={() => router.push(`/user/${post.user_id}`)} className="font-semibold hover:underline text-left">
                         {post.author_name || "Unknown"}
                       </button>
@@ -2034,7 +2030,7 @@ export default function Feed() {
                             </button>
                           )}
 
-                          {feedType === "people" && currentUserId === post.user_id && editingPostId !== post.id && (
+                          {currentUserId === post.user_id && editingPostId !== post.id && (
                             <>
                               <button onClick={() => startEditing(post)} className="rounded-full px-2.5 py-1 text-gray-400 hover:bg-gray-100 hover:text-brand-500">
                                 Edit

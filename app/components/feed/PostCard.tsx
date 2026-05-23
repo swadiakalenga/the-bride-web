@@ -87,7 +87,7 @@ export default function PostCard({
         </div>
       )}
 
-      <div className="flex items-start gap-3 p-4">
+      <div className="flex items-start gap-3 p-4 min-w-0">
         {/* Avatar */}
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-200 font-bold text-gray-600 text-sm">
           {(post.author_name || "U").charAt(0).toUpperCase()}

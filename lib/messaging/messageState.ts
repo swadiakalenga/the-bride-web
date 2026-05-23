@@ -23,9 +23,7 @@ export function mergeMessages(
   const seen = new Set(existing.map((m) => m.id));
   const novel = incoming.filter((m) => !seen.has(m.id));
   if (novel.length === 0) return existing;
-  const merged = sortMessages([...existing, ...novel]);
-  console.log(`[message-module] merged count: ${merged.length} (added ${novel.length})`);
-  return merged;
+  return sortMessages([...existing, ...novel]);
 }
 
 export function replaceOptimisticMessage(

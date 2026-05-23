@@ -197,7 +197,6 @@ export default function ChatPage() {
       try {
         const fresh = await loadNewMessagesSince(conversationId, cursor);
         if (fresh.length > 0) {
-          console.log(`[message-module] polling fetched: ${fresh.length} new`);
           setMessages((prev) => {
             const merged = mergeMessages(prev, fresh);
             latestCursorRef.current = getLatestMessageCursor(merged) ?? cursor;
@@ -227,7 +226,6 @@ export default function ChatPage() {
         const handle = await CapApp.addListener("appStateChange", async ({ isActive }) => {
           if (!isActive) return;
           const cursor = latestCursorRef.current;
-          console.log(`[message-module] app resumed, cursor: ${cursor ?? "none"}`);
           if (!cursor) return;
 
           try {
@@ -406,7 +404,6 @@ export default function ChatPage() {
         { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${convId}` },
         (payload) => {
           const newMsg = payload.new as ChatMessage;
-          console.log(`[message-module] realtime received: ${newMsg.id}`);
 
           setMessages((prev) => {
             // Replace matching optimistic bubble
@@ -475,12 +472,10 @@ export default function ChatPage() {
       is_read: false,
       pending: true,
     };
-    console.log(`[message-module] send optimistic: ${tempId}`);
     setMessages((prev) => [...prev, optimistic]);
 
     try {
       const saved = await svcSendMessage({ conversationId, senderId: me, content: text });
-      console.log(`[message-module] send confirmed: ${saved.id}`);
       setMessages((prev) => {
         const next = replaceOptimisticMessage(prev, tempId, saved);
         latestCursorRef.current = getLatestMessageCursor(next) ?? latestCursorRef.current;
@@ -545,7 +540,6 @@ export default function ChatPage() {
       is_read: false,
       pending: true,
     };
-    console.log(`[message-module] send optimistic: ${tempId}`);
     setMessages((prev) => [...prev, optimistic]);
 
     try {
@@ -556,7 +550,6 @@ export default function ChatPage() {
         mediaUrl,
         mediaType: type,
       });
-      console.log(`[message-module] send confirmed: ${saved.id}`);
       setMessages((prev) => {
         const next = replaceOptimisticMessage(prev, tempId, saved);
         latestCursorRef.current = getLatestMessageCursor(next) ?? latestCursorRef.current;

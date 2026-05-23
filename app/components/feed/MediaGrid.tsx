@@ -17,21 +17,21 @@ export default function MediaGrid({ urls }: MediaGridProps) {
   const prev = () => setLightboxIndex((cur) => (cur !== null ? (cur - 1 + urls.length) % urls.length : 0));
   const next = () => setLightboxIndex((cur) => (cur !== null ? (cur + 1) % urls.length : 0));
 
-  const imgClass = "cursor-pointer object-cover transition-opacity hover:opacity-90 active:opacity-75 select-none";
+  const imgClass = "cursor-pointer object-cover transition-opacity hover:opacity-90 active:opacity-75 select-none max-w-full";
 
   return (
     <>
       {urls.length === 1 && (
         <button
           type="button"
-          className="mt-3 block w-full text-left"
+          className="mt-3 block w-full max-w-full overflow-hidden rounded-lg text-left"
           onClick={() => open(0)}
           aria-label="View image"
         >
           <img
             src={urls[0]}
             alt="Post image"
-            className={`w-full rounded-lg border ${imgClass}`}
+            className={`w-full max-w-full rounded-lg border ${imgClass}`}
             loading="lazy"
             decoding="async"
           />
