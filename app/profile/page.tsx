@@ -493,6 +493,12 @@ export default function ProfilePage() {
                     >
                       📖 Devotionals
                     </button>
+                    <button
+                      onClick={() => router.push(`/church/${myChurch.id}/live/manage`)}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-gray-800 mt-1"
+                    >
+                      📺 Manage Live
+                    </button>
                   </div>
                 </Card>
               )}
@@ -595,6 +601,10 @@ export default function ProfilePage() {
                         <button onClick={() => router.push(`/church/${myChurch.id}/devotionals`)}
                           className="flex items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 col-span-2">
                           📖 {lang === "fr" ? "Dévotions" : "Devotionals"}
+                        </button>
+                        <button onClick={() => router.push(`/church/${myChurch.id}/live/manage`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-900 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 col-span-2">
+                          📺 {lang === "fr" ? "Gérer le live" : "Manage Live"}
                         </button>
                       </div>
 
@@ -972,6 +982,10 @@ export default function ProfilePage() {
                   <button onClick={() => router.push(`/church/${myChurch.id}/payouts`)}
                     className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50">
                     💳 {lang === "fr" ? "Configuration des versements" : "Payout setup"}
+                  </button>
+                  <button onClick={() => router.push(`/church/${myChurch.id}/live/manage`)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-gray-800">
+                    📺 {lang === "fr" ? "Gérer le live" : "Manage Live"}
                   </button>
                   <button
                     onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
