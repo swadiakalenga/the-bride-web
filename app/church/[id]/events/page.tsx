@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import BottomNav from "../../../components/ui/BottomNav";
 import type { ChurchEventWithRsvp, RsvpStatus } from "../../../../lib/types";
+import ConfirmDialog, { type ConfirmDialogOptions } from "../../../components/ui/ConfirmDialog";
 
 export default function ChurchEventsPage() {
   const params = useParams();
@@ -16,6 +17,7 @@ export default function ChurchEventsPage() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogOptions | null>(null);
 
   // Create event form
   const [showForm, setShowForm] = useState(false);
@@ -144,10 +146,18 @@ export default function ChurchEventsPage() {
     loadPage();
   };
 
-  const deleteEvent = async (eventId: string) => {
-    if (!confirm("Delete this event?")) return;
-    await supabase.from("church_events").delete().eq("id", eventId);
-    setEvents((prev) => prev.filter((e) => e.id !== eventId));
+  const deleteEvent = (eventId: string) => {
+    setConfirmDialog({
+      title: "Delete event",
+      message: "Delete this event? This cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        await supabase.from("church_events").delete().eq("id", eventId);
+        setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      },
+    });
   };
 
   const setRsvp = async (eventId: string, next: RsvpStatus) => {
@@ -421,6 +431,14 @@ export default function ChurchEventsPage() {
       </div>
 
       <BottomNav />
+
+      {confirmDialog && (
+        <ConfirmDialog
+          open
+          {...confirmDialog}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </main>
   );
 }

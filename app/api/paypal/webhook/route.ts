@@ -1,22 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verifyPayPalWebhook } from "../../../../lib/paypal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PayPal Webhook Handler
 //
-// IMPORTANT — Webhook signature verification is marked TODO below.
-// Before enabling in production:
-//   1. In the PayPal dashboard → My Apps → your app → Webhooks → Add webhook
-//      URL: https://thebride.app/api/paypal/webhook
-//      Events: PAYMENT.CAPTURE.COMPLETED, PAYMENT.CAPTURE.DENIED,
-//              PAYMENT.CAPTURE.REFUNDED
-//   2. Copy the Webhook ID → add to Vercel env as PAYPAL_WEBHOOK_ID
-//   3. Implement signature verification using PayPal's /v1/notifications/verify-webhook-signature
-//      API call (see verifyWebhookSignature below — currently stubbed out).
+// Signature verification is implemented via verifyPayPalWebhook() from lib/paypal.
 //
-// Without verified signatures, a malicious actor could POST a fake
-// PAYMENT.CAPTURE.COMPLETED event to this endpoint and confirm donations
-// that were never paid.  Do NOT remove the TODO before shipping.
+// Required Vercel env vars:
+//   PAYPAL_WEBHOOK_ID   — from PayPal dashboard → Your App → Webhooks
+//   PAYPAL_CLIENT_ID    — PayPal app client ID
+//   PAYPAL_CLIENT_SECRET — PayPal app secret
+//   PAYPAL_MODE         — "live" or "sandbox" (defaults to sandbox)
+//
+// To register the webhook in PayPal dashboard:
+//   1. Apps & Credentials → your app → Webhooks → Add webhook
+//   2. URL: https://thebride.app/api/paypal/webhook
+//   3. Events: PAYMENT.CAPTURE.COMPLETED, PAYMENT.CAPTURE.DENIED,
+//              PAYMENT.CAPTURE.REFUNDED
+//   4. Copy the Webhook ID → add to Vercel as PAYPAL_WEBHOOK_ID
 // ─────────────────────────────────────────────────────────────────────────────
 
 function adminClient() {
@@ -24,39 +26,6 @@ function adminClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
-}
-
-// TODO: implement real signature verification before production
-async function verifyWebhookSignature(_req: NextRequest, _body: string): Promise<boolean> {
-  const webhookId = process.env.PAYPAL_WEBHOOK_ID;
-  if (!webhookId) {
-    // If no webhook ID configured, log and reject all webhook events
-    console.warn("[paypal-webhook] PAYPAL_WEBHOOK_ID not set — rejecting event");
-    return false;
-  }
-
-  // TODO: call PayPal /v1/notifications/verify-webhook-signature
-  // Reference: https://developer.paypal.com/api/webhooks/v1/#verify-webhook-signature_post
-  //
-  // const token = await getAccessToken();
-  // const res = await fetch(`${BASE}/v1/notifications/verify-webhook-signature`, {
-  //   method: "POST",
-  //   headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-  //   body: JSON.stringify({
-  //     auth_algo:         req.headers.get("paypal-auth-algo"),
-  //     cert_url:          req.headers.get("paypal-cert-url"),
-  //     transmission_id:   req.headers.get("paypal-transmission-id"),
-  //     transmission_sig:  req.headers.get("paypal-transmission-sig"),
-  //     transmission_time: req.headers.get("paypal-transmission-time"),
-  //     webhook_id:        webhookId,
-  //     webhook_event:     JSON.parse(body),
-  //   }),
-  // });
-  // const { verification_status } = await res.json();
-  // return verification_status === "SUCCESS";
-
-  console.warn("[paypal-webhook] Signature verification not yet implemented — REJECTING event");
-  return false;
 }
 
 type PayPalWebhookEvent = {
@@ -74,10 +43,10 @@ type PayPalWebhookEvent = {
 export async function POST(req: NextRequest) {
   const body = await req.text();
 
-  const verified = await verifyWebhookSignature(req, body);
+  const verified = await verifyPayPalWebhook(req, body);
   if (!verified) {
     // Return 200 so PayPal stops retrying — we log the event but take no action
-    console.error("[paypal-webhook] Unverified event received — ignoring");
+    console.error("[paypal-webhook] Signature verification failed — ignoring event");
     return NextResponse.json({ received: true, processed: false });
   }
 

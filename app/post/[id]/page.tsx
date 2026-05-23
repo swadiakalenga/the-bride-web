@@ -13,6 +13,9 @@ import MediaPlayer from "../../components/feed/MediaPlayer";
 import type { Post, Comment } from "../../../lib/types";
 import { checkContentGuidelines } from "../../../lib/types";
 import LinkifiedText from "../../components/ui/LinkifiedText";
+import LinkPreviewCard from "../../components/feed/LinkPreviewCard";
+import ConfirmDialog from "../../components/ui/ConfirmDialog";
+import type { ConfirmDialogOptions } from "../../components/ui/ConfirmDialog";
 
 type LikeRow = {
   post_id: string;
@@ -44,6 +47,7 @@ export default function PostPage() {
 
   const [editingPost, setEditingPost] = useState(false);
   const [editPostContent, setEditPostContent] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogOptions | null>(null);
 
   useEffect(() => {
     loadPage();
@@ -287,21 +291,19 @@ export default function PostPage() {
     setEditingPost(false);
   };
 
-  const handleDeletePost = async () => {
+  const handleDeletePost = () => {
     if (!post) return;
-    if (!window.confirm("Delete this post?")) return;
-
-    const { error } = await supabase
-      .from("posts")
-      .delete()
-      .eq("id", postId);
-
-    if (error) {
-      setUiMessage(`Delete failed: ${error.message}`);
-      return;
-    }
-
-    router.push("/feed");
+    setConfirmDialog({
+      title: "Delete post",
+      message: "This cannot be undone. Delete this post?",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        const { error } = await supabase.from("posts").delete().eq("id", postId);
+        if (error) { setUiMessage(`Delete failed: ${error.message}`); return; }
+        router.push("/feed");
+      },
+    });
   };
 
   const topLevelComments = useMemo(
@@ -440,6 +442,17 @@ export default function PostPage() {
           )}
           {post.media_type === "video" && post.media_urls?.[0] && (
             <MediaPlayer url={post.media_urls[0]} type="video" />
+          )}
+
+          {post.link_url && (
+            <LinkPreviewCard
+              url={post.link_url}
+              title={post.link_title}
+              description={post.link_description}
+              image={post.link_image_url}
+              siteName={post.link_site_name}
+              domain={post.link_domain}
+            />
           )}
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-500">
@@ -603,6 +616,16 @@ export default function PostPage() {
       </div>
 
       <BottomNav />
+
+      <ConfirmDialog
+        open={!!confirmDialog}
+        title={confirmDialog?.title}
+        message={confirmDialog?.message ?? ""}
+        confirmLabel={confirmDialog?.confirmLabel}
+        destructive={confirmDialog?.destructive ?? true}
+        onConfirm={() => confirmDialog?.onConfirm()}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </main>
   );
 }

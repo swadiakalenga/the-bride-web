@@ -216,7 +216,7 @@ export default function UserProfilePage() {
     loadUserPosts(userId, me);
   }
 
-  const USER_POST_COLS = "id, user_id, church_id, content, media_urls, media_type, author_name, tagged_user_ids, created_at, updated_at";
+  const USER_POST_COLS = "id, user_id, church_id, content, media_urls, media_type, author_name, tagged_user_ids, created_at, updated_at, link_url, link_title, link_description, link_image_url, link_site_name, link_domain";
 
   const loadUserPosts = async (ownerId: string, viewerId: string | null) => {
     const [{ data: ownPostsData }, { data: sharesData }] = await Promise.all([

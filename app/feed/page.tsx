@@ -16,10 +16,14 @@ import RightSidebar from "../components/feed/RightSidebar";
 import MobileMenuDrawer from "../components/ui/MobileMenuDrawer";
 import EmojiPicker from "../components/ui/EmojiPicker";
 import ExpandableText from "../components/ui/ExpandableText";
+import LinkPreviewCard from "../components/feed/LinkPreviewCard";
 import { useLanguage } from "../../lib/useLanguage";
 import type { Post, Comment, Profile } from "../../lib/types";
 import { checkContentGuidelines } from "../../lib/types";
 import { compressBatch } from "../../lib/imageCompression";
+import { extractFirstUrl } from "../../lib/extractFirstUrl";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import type { ConfirmDialogOptions } from "../components/ui/ConfirmDialog";
 
 type CommentMap = Record<string, Comment[]>;
 type CommentInputMap = Record<string, string>;
@@ -92,6 +96,7 @@ export default function Feed() {
 
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogOptions | null>(null);
   const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
@@ -358,7 +363,7 @@ export default function Feed() {
   }
 
   const FEED_PAGE_SIZE = 15;
-  const FEED_COLS = "id, user_id, church_id, content, media_urls, media_type, author_name, tagged_user_ids, created_at, updated_at";
+  const FEED_COLS = "id, user_id, church_id, content, media_urls, media_type, author_name, tagged_user_ids, created_at, updated_at, link_url, link_title, link_description, link_image_url, link_site_name, link_domain";
 
   const loadProfiles = async (postList: Post[], commentGroups?: CommentMap, extraUserIds?: string[], merge = false) => {
     const ids = new Set<string>();
@@ -1014,6 +1019,41 @@ export default function Feed() {
       postPayload.tagged_user_ids = taggedUsers.map((u) => u.id);
     }
 
+    // ── Link preview detection ────────────────────────────────────────────────
+    // Detect first URL in post content, fetch OG metadata server-side, and
+    // persist preview fields so the card renders immediately on load.
+    // Never blocks the post — silently skipped if the fetch fails.
+    const firstUrl = extractFirstUrl(content.trim());
+    if (firstUrl) {
+      try {
+        const previewRes = await fetch("/api/link-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: firstUrl }),
+        });
+        if (previewRes.ok) {
+          const preview = (await previewRes.json()) as {
+            title?: string | null;
+            description?: string | null;
+            image?: string | null;
+            siteName?: string | null;
+            domain?: string | null;
+          };
+          if (preview.title || preview.description || preview.image) {
+            postPayload.link_url         = firstUrl;
+            postPayload.link_title       = preview.title       ?? null;
+            postPayload.link_description = preview.description ?? null;
+            postPayload.link_image_url   = preview.image       ?? null;
+            postPayload.link_site_name   = preview.siteName    ?? null;
+            postPayload.link_domain      = preview.domain      ?? null;
+          }
+        }
+      } catch {
+        // Network/timeout — post without preview
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const { error } = await supabase.from("posts").insert([postPayload]);
 
     if (error) {
@@ -1127,35 +1167,27 @@ export default function Feed() {
     }
   };
 
-  const deletePost = async (postId: string) => {
+  const deletePost = (postId: string) => {
     if (!currentUserId) return;
-
-    const confirmed = window.confirm("Are you sure you want to delete this post?");
-    if (!confirmed) return;
-
-    const { error } = await supabase
-      .from("posts")
-      .delete()
-      .eq("id", postId)
-      .eq("user_id", currentUserId);
-
-    if (error) {
-      setErrorMessage(`Delete failed: ${error.message}`);
-      return;
-    }
-
-    loadPosts();
+    setConfirmDialog({
+      title: lang === "fr" ? "Supprimer la publication" : "Delete post",
+      message: lang === "fr"
+        ? "Cette action est irréversible. Supprimer cette publication ?"
+        : "This cannot be undone. Delete this post?",
+      confirmLabel: lang === "fr" ? "Supprimer" : "Delete",
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        const { error } = await supabase
+          .from("posts")
+          .delete()
+          .eq("id", postId)
+          .eq("user_id", currentUserId!);
+        if (error) { setErrorMessage(`Delete failed: ${error.message}`); return; }
+        loadPosts();
+      },
+    });
   };
 
-  const blockUser = async (userId: string) => {
-    if (!currentUserId) return;
-    const label = lang === "fr"
-      ? "Bloquer cet utilisateur ? Son contenu sera masqué."
-      : "Block this user? Their content will be hidden.";
-    if (!confirm(label)) return;
-    await supabase.from("user_blocks").insert([{ blocker_id: currentUserId, blocked_id: userId }]);
-    setBlockedUserIds((prev) => new Set([...prev, userId]));
-  };
 
   const startEditing = (post: Post) => {
     setEditingPostId(post.id);
@@ -1325,24 +1357,25 @@ export default function Feed() {
     loadUnreadNotificationCount();
   };
 
-  const deleteComment = async (commentId: string) => {
+  const deleteComment = (commentId: string) => {
     if (!currentUserId) return;
-
-    const confirmed = window.confirm("Delete this comment?");
-    if (!confirmed) return;
-
-    const { error } = await supabase
-      .from("comments")
-      .delete()
-      .eq("id", commentId)
-      .eq("user_id", currentUserId);
-
-    if (error) {
-      setErrorMessage(`Delete comment failed: ${error.message}`);
-      return;
-    }
-
-    loadPosts();
+    setConfirmDialog({
+      title: lang === "fr" ? "Supprimer le commentaire" : "Delete comment",
+      message: lang === "fr"
+        ? "Supprimer ce commentaire définitivement ?"
+        : "Permanently delete this comment?",
+      confirmLabel: lang === "fr" ? "Supprimer" : "Delete",
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        const { error } = await supabase
+          .from("comments")
+          .delete()
+          .eq("id", commentId)
+          .eq("user_id", currentUserId!);
+        if (error) { setErrorMessage(`Delete comment failed: ${error.message}`); return; }
+        loadPosts();
+      },
+    });
   };
 
   const toggleCommentBox = (postId: string) => {
@@ -2036,6 +2069,17 @@ export default function Feed() {
                           {post.media_type === "video" && post.media_urls?.[0] && (
                             <MediaPlayer url={post.media_urls[0]} type="video" />
                           )}
+
+                          {post.link_url && (
+                            <LinkPreviewCard
+                              url={post.link_url}
+                              title={post.link_title}
+                              description={post.link_description}
+                              image={post.link_image_url}
+                              siteName={post.link_site_name}
+                              domain={post.link_domain}
+                            />
+                          )}
                         </>
                       )}
 
@@ -2340,6 +2384,17 @@ export default function Feed() {
         open={showMobileMenu}
         onClose={() => setShowMobileMenu(false)}
         myProfile={myProfile}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDialog}
+        title={confirmDialog?.title}
+        message={confirmDialog?.message ?? ""}
+        confirmLabel={confirmDialog?.confirmLabel}
+        cancelLabel={lang === "fr" ? "Annuler" : "Cancel"}
+        destructive={confirmDialog?.destructive ?? true}
+        onConfirm={() => confirmDialog?.onConfirm()}
+        onCancel={() => setConfirmDialog(null)}
       />
     </main>
   );

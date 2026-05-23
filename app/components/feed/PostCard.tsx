@@ -5,6 +5,7 @@ import type { Post } from "../../../lib/types";
 import MediaGrid from "./MediaGrid";
 import MediaPlayer from "./MediaPlayer";
 import ExpandableText from "../ui/ExpandableText";
+import LinkPreviewCard from "./LinkPreviewCard";
 
 type PostCardProps = {
   post: Post;
@@ -149,6 +150,17 @@ export default function PostCard({
 
               {post.media_type === "video" && mediaUrls?.[0] && (
                 <MediaPlayer url={mediaUrls[0]} type="video" />
+              )}
+
+              {post.link_url && (
+                <LinkPreviewCard
+                  url={post.link_url}
+                  title={post.link_title}
+                  description={post.link_description}
+                  image={post.link_image_url}
+                  siteName={post.link_site_name}
+                  domain={post.link_domain}
+                />
               )}
             </>
           )}

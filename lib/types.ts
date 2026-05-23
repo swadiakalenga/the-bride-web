@@ -16,6 +16,13 @@ export type Post = {
   media_urls: string[] | null;
   media_type: string | null;
   tagged_user_ids?: string[];
+  // Link preview fields (populated when post content contains a URL)
+  link_url?: string | null;
+  link_title?: string | null;
+  link_description?: string | null;
+  link_image_url?: string | null;
+  link_site_name?: string | null;
+  link_domain?: string | null;
 };
 
 export type Comment = {

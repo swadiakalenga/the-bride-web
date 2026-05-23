@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
 import BottomNav from "../../components/ui/BottomNav";
+import ConfirmDialog, { type ConfirmDialogOptions } from "../../components/ui/ConfirmDialog";
 
 type ReplayCard = {
   id: string;
@@ -21,6 +22,9 @@ type ChurchPost = {
   media_type: string | null;
   author_name: string | null;
   created_at: string;
+  link_url?: string | null;
+  link_domain?: string | null;
+  link_title?: string | null;
 };
 
 type ChurchInfo = {
@@ -73,6 +77,8 @@ export default function ChurchProfilePage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover,  setUploadingCover]  = useState(false);
   const [uploadError,     setUploadError]     = useState<string | null>(null);
+
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogOptions | null>(null);
 
   useEffect(() => { loadChurch(); }, [churchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -157,7 +163,7 @@ export default function ChurchProfilePage() {
     // Load recent church posts
     const { data: postsData } = await supabase
       .from("posts")
-      .select("id, content, media_urls, media_type, author_name, created_at")
+      .select("id, content, media_urls, media_type, author_name, created_at, link_url, link_domain, link_title")
       .eq("church_id", churchId)
       .order("created_at", { ascending: false })
       .limit(10);
@@ -175,14 +181,23 @@ export default function ChurchProfilePage() {
     setJoinLoading(false);
   };
 
-  const leaveChurch = async () => {
-    if (!currentUserId || !confirm(isFr ? "Quitter cette église ?" : "Leave this church?")) return;
-    setJoinLoading(true);
-    await supabase.from("church_memberships").delete().eq("church_id", churchId).eq("user_id", currentUserId);
-    setIsMember(false);
-    setPendingRequest(false);
-    setMemberCount((prev) => Math.max(0, prev - 1));
-    setJoinLoading(false);
+  const leaveChurch = () => {
+    if (!currentUserId) return;
+    setConfirmDialog({
+      title: isFr ? "Quitter l'église" : "Leave church",
+      message: isFr ? "Quitter cette église ?" : "Leave this church?",
+      confirmLabel: isFr ? "Quitter" : "Leave",
+      destructive: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setJoinLoading(true);
+        await supabase.from("church_memberships").delete().eq("church_id", churchId).eq("user_id", currentUserId);
+        setIsMember(false);
+        setPendingRequest(false);
+        setMemberCount((prev) => Math.max(0, prev - 1));
+        setJoinLoading(false);
+      },
+    });
   };
 
   const handleBlock = async () => {
@@ -582,6 +597,19 @@ export default function ChurchProfilePage() {
                             {post.content}
                           </p>
                         )}
+
+                        {/* Link indicator (compact — full card shown on post detail) */}
+                        {post.link_url && (
+                          <div className="mt-2 flex items-center gap-1.5 truncate">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-gray-400">
+                              <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                              <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                            </svg>
+                            <span className="truncate text-[11px] font-medium text-gray-400">
+                              {post.link_domain || post.link_title || post.link_url}
+                            </span>
+                          </div>
+                        )}
                       </button>
                     );
                   })}
@@ -593,6 +621,14 @@ export default function ChurchProfilePage() {
       </div>
 
       <BottomNav />
+
+      {confirmDialog && (
+        <ConfirmDialog
+          open
+          {...confirmDialog}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </main>
   );
 }

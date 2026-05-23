@@ -90,13 +90,18 @@ export async function POST(req: NextRequest) {
       ? "Join the stream now"
       : "A new live event has been scheduled";
 
+  // Use internal push secret for server-to-server calls — bypasses the
+  // notification_id proof-of-legitimacy check (this route already verified
+  // the caller is a church_admin with matching church_id above).
+  const internalSecret = process.env.INTERNAL_PUSH_SECRET ?? "";
+
   await Promise.allSettled(
     recipients.map((f) =>
       fetch(`${origin}/api/push/send`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`,
+          "Content-Type":          "application/json",
+          "x-internal-push-secret": internalSecret,
         },
         body: JSON.stringify({
           user_id: f.user_id,

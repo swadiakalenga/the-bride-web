@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { useLanguage } from "../../../../lib/useLanguage";
 import { createNotification } from "../../../../lib/notificationPush";
+import ConfirmDialog, { type ConfirmDialogOptions } from "../../../components/ui/ConfirmDialog";
 
 type MemberRow = {
   id: string;
@@ -28,6 +29,7 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [tab, setTab] = useState<"pending" | "members">("pending");
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogOptions | null>(null);
 
   useEffect(() => {
     loadPage();
@@ -107,26 +109,34 @@ export default function MembersPage() {
     await loadMembers();
   };
 
-  const revokeMembership = async (row: MemberRow) => {
-    if (!confirm(t("common_confirm"))) return;
-    if (!currentUserId) return;
-    setActionLoading(row.id);
+  const revokeMembership = (row: MemberRow) => {
+    setConfirmDialog({
+      title: t("church_remove"),
+      message: t("common_confirm"),
+      confirmLabel: t("church_remove"),
+      destructive: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        if (!currentUserId) return;
+        setActionLoading(row.id);
 
-    await supabase
-      .from("church_memberships")
-      .update({ status: "rejected" })
-      .eq("id", row.id);
+        await supabase
+          .from("church_memberships")
+          .update({ status: "rejected" })
+          .eq("id", row.id);
 
-    // Notify the user that their membership was revoked
-    await createNotification({
-      recipientUserId: row.user_id,
-      actorUserId: currentUserId,
-      type: "membership_rejected",
-      churchId,
+        // Notify the user that their membership was revoked
+        await createNotification({
+          recipientUserId: row.user_id,
+          actorUserId: currentUserId,
+          type: "membership_rejected",
+          churchId,
+        });
+
+        setActionLoading(null);
+        await loadMembers();
+      },
     });
-
-    setActionLoading(null);
-    await loadMembers();
   };
 
   const avatarLetter = (name: string | null) =>
@@ -290,6 +300,14 @@ export default function MembersPage() {
           </>
         )}
       </div>
+
+      {confirmDialog && (
+        <ConfirmDialog
+          open
+          {...confirmDialog}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </main>
   );
 }

@@ -771,7 +771,6 @@ export default function ChatPage() {
             )}
             <div className="text-left min-w-0">
               <p className="font-bold text-gray-900 leading-tight truncate">{otherName}</p>
-              <p className="text-[11px] text-green-500 font-medium">Active now</p>
             </div>
           </button>
 

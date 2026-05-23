@@ -140,3 +140,74 @@ export async function capturePayPalOrder(orderId: string): Promise<CaptureResult
     amountValue:  capture.amount.value,
   };
 }
+
+// ── Webhook signature verification ───────────────────────────────────────
+// Reference: https://developer.paypal.com/api/webhooks/v1/#verify-webhook-signature_post
+//
+// Required env vars:
+//   PAYPAL_WEBHOOK_ID — from PayPal dashboard → Your App → Webhooks
+
+export async function verifyPayPalWebhook(
+  req: {
+    headers: { get: (name: string) => string | null };
+  },
+  rawBody: string,
+): Promise<boolean> {
+  const webhookId = process.env.PAYPAL_WEBHOOK_ID;
+  if (!webhookId) {
+    console.warn("[paypal-webhook] PAYPAL_WEBHOOK_ID not set — rejecting all webhook events");
+    return false;
+  }
+
+  const authAlgo        = req.headers.get("paypal-auth-algo");
+  const certUrl         = req.headers.get("paypal-cert-url");
+  const transmissionId  = req.headers.get("paypal-transmission-id");
+  const transmissionSig = req.headers.get("paypal-transmission-sig");
+  const transmissionTime = req.headers.get("paypal-transmission-time");
+
+  if (!authAlgo || !certUrl || !transmissionId || !transmissionSig || !transmissionTime) {
+    console.warn("[paypal-webhook] Missing required PayPal signature headers");
+    return false;
+  }
+
+  let token: string;
+  try {
+    token = await getAccessToken();
+  } catch (err) {
+    console.error("[paypal-webhook] Failed to get access token for signature verification", err);
+    return false;
+  }
+
+  let webhookEvent: unknown;
+  try {
+    webhookEvent = JSON.parse(rawBody);
+  } catch {
+    return false;
+  }
+
+  const res = await fetch(`${BASE}/v1/notifications/verify-webhook-signature`, {
+    method: "POST",
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      auth_algo:         authAlgo,
+      cert_url:          certUrl,
+      transmission_id:   transmissionId,
+      transmission_sig:  transmissionSig,
+      transmission_time: transmissionTime,
+      webhook_id:        webhookId,
+      webhook_event:     webhookEvent,
+    }),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    console.error("[paypal-webhook] Verification API returned", res.status);
+    return false;
+  }
+
+  const result = await res.json() as { verification_status?: string };
+  return result.verification_status === "SUCCESS";
+}

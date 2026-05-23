@@ -71,17 +71,22 @@ export async function createNotification(params: NotificationParams): Promise<vo
   // Never send to yourself
   if (!recipientUserId || recipientUserId === actorUserId) return;
 
-  // 1. Persist the notification row
-  const { error } = await supabase.from("notifications").insert([{
-    recipient_user_id: recipientUserId,
-    actor_user_id:     actorUserId,
-    type,
-    post_id:           postId,
-    comment_id:        commentId,
-    conversation_id:   conversationId,
-    church_id:         churchId,
-    is_read:           false,
-  }]);
+  // 1. Persist the notification row — select the id back so we can pass it
+  //    to the push endpoint as proof of a legitimate notification.
+  const { data: notifRow, error } = await supabase
+    .from("notifications")
+    .insert([{
+      recipient_user_id: recipientUserId,
+      actor_user_id:     actorUserId,
+      type,
+      post_id:           postId,
+      comment_id:        commentId,
+      conversation_id:   conversationId,
+      church_id:         churchId,
+      is_read:           false,
+    }])
+    .select("id")
+    .single();
 
   if (error) {
     console.error("[notification] insert error", { type, error });
@@ -89,12 +94,12 @@ export async function createNotification(params: NotificationParams): Promise<vo
   }
 
   // 2. Fire push — non-blocking, never propagates failure to the caller
-  void firePush(params);
+  void firePush(params, notifRow.id);
 }
 
 // ── Push delivery (fire-and-forget) ──────────────────────────────────────
 
-async function firePush(params: NotificationParams): Promise<void> {
+async function firePush(params: NotificationParams, notificationId: string): Promise<void> {
   try {
     // Need a valid session token to authenticate the API route
     const { data: { session } } = await supabase.auth.getSession();
@@ -124,7 +129,8 @@ async function firePush(params: NotificationParams): Promise<void> {
         "Authorization": `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
-        user_id: params.recipientUserId,
+        user_id:         params.recipientUserId,
+        notification_id: notificationId,   // proof-of-legitimacy for the push endpoint
         title,
         body,
         data,

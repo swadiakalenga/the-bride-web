@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import BottomNav from "../../../components/ui/BottomNav";
 import type { Devotional } from "../../../../lib/types";
+import ConfirmDialog, { type ConfirmDialogOptions } from "../../../components/ui/ConfirmDialog";
 
 export default function DevotionalsPage() {
   const params = useParams();
@@ -17,6 +18,7 @@ export default function DevotionalsPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogOptions | null>(null);
 
   // Create devotional form
   const [showForm, setShowForm] = useState(false);
@@ -82,10 +84,18 @@ export default function DevotionalsPage() {
     loadPage();
   };
 
-  const deleteDevotional = async (id: string) => {
-    if (!confirm("Delete this devotional?")) return;
-    await supabase.from("devotionals").delete().eq("id", id);
-    setDevotionals((prev) => prev.filter((d) => d.id !== id));
+  const deleteDevotional = (id: string) => {
+    setConfirmDialog({
+      title: "Delete devotional",
+      message: "Delete this devotional? This cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        await supabase.from("devotionals").delete().eq("id", id);
+        setDevotionals((prev) => prev.filter((d) => d.id !== id));
+      },
+    });
   };
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -254,6 +264,14 @@ export default function DevotionalsPage() {
       </div>
 
       <BottomNav />
+
+      {confirmDialog && (
+        <ConfirmDialog
+          open
+          {...confirmDialog}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </main>
   );
 }

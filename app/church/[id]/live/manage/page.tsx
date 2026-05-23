@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../../lib/supabase";
 import type { LiveEvent } from "../../../../../lib/types";
+import ConfirmDialog, { type ConfirmDialogOptions } from "../../../../components/ui/ConfirmDialog";
 
 const RTMP_SERVER = "rtmps://global-live.mux.com:443/app";
 
@@ -117,6 +118,7 @@ function EventRow({
   const router = useRouter();
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogOptions | null>(null);
 
   async function callApi(path: string): Promise<{ ok: boolean; error?: string }> {
     const res = await fetch(path, {
@@ -139,30 +141,47 @@ function EventRow({
     if (!obsExpanded) onToggleObs();
   };
 
-  const endStream = async () => {
-    if (!confirm("End this stream? It will be saved as a replay.")) return;
-    setWorking(true);
-    setError(null);
-    const result = await callApi("/api/live/end");
-    setWorking(false);
-    if (!result.ok) { setError(result.error ?? "Failed to end stream"); return; }
-    onUpdated(event.id, { status: "ended", ended_at: new Date().toISOString() });
+  const endStream = () => {
+    setConfirmDialog({
+      title: "End stream",
+      message: "End this stream? It will be saved as a replay.",
+      confirmLabel: "End Stream",
+      destructive: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setWorking(true);
+        setError(null);
+        const result = await callApi("/api/live/end");
+        setWorking(false);
+        if (!result.ok) { setError(result.error ?? "Failed to end stream"); return; }
+        onUpdated(event.id, { status: "ended", ended_at: new Date().toISOString() });
+      },
+    });
   };
 
-  const cancelEvent = async () => {
-    if (!confirm("Cancel this scheduled stream?")) return;
-    setWorking(true);
-    setError(null);
-    const { error: err } = await supabase
-      .from("church_live_events")
-      .update({ status: "cancelled" })
-      .eq("id", event.id);
-    setWorking(false);
-    if (err) { setError(err.message); return; }
-    onRemoved(event.id);
+  const cancelEvent = () => {
+    setConfirmDialog({
+      title: "Cancel stream",
+      message: "Cancel this scheduled stream?",
+      confirmLabel: "Cancel",
+      destructive: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setWorking(true);
+        setError(null);
+        const { error: err } = await supabase
+          .from("church_live_events")
+          .update({ status: "cancelled" })
+          .eq("id", event.id);
+        setWorking(false);
+        if (err) { setError(err.message); return; }
+        onRemoved(event.id);
+      },
+    });
   };
 
   return (
+    <>
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
       <div className="p-4">
         <div className="flex items-start gap-3">
@@ -201,7 +220,7 @@ function EventRow({
                   {obsExpanded ? "Hide OBS" : "OBS Setup"}
                 </button>
                 <button
-                  onClick={() => void cancelEvent()}
+                  onClick={cancelEvent}
                   disabled={working}
                   className="rounded-full px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-50 disabled:opacity-60"
                 >
@@ -225,7 +244,7 @@ function EventRow({
                   Watch Live
                 </button>
                 <button
-                  onClick={() => void endStream()}
+                  onClick={endStream}
                   disabled={working}
                   className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60"
                 >
@@ -259,6 +278,14 @@ function EventRow({
         </div>
       )}
     </div>
+    {confirmDialog && (
+      <ConfirmDialog
+        open
+        {...confirmDialog}
+        onCancel={() => setConfirmDialog(null)}
+      />
+    )}
+    </>
   );
 }
 

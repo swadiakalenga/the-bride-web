@@ -86,10 +86,13 @@ async function getFcmAccessToken(): Promise<string> {
 // ── Types ─────────────────────────────────────────────────────────────────
 
 type PushBody = {
-  user_id: string;
-  title:   string;
-  body:    string;
-  data?:   Record<string, string>;
+  user_id:         string;
+  title:           string;
+  body:            string;
+  data?:           Record<string, string>;
+  // Required for user-JWT calls — must reference a real notification row
+  // where recipient_user_id = user_id AND actor_user_id = authenticated caller
+  notification_id?: string;
 };
 
 type TokenRow = { id: string; token: string; platform: string };
@@ -100,20 +103,23 @@ export function GET() {
   return NextResponse.json({ error: "Use POST" }, { status: 405 });
 }
 
+// ── Authorization ─────────────────────────────────────────────────────────
+//
+// Allowed if EITHER:
+//   A. x-internal-push-secret header matches INTERNAL_PUSH_SECRET env var
+//      (server-to-server calls from API routes — e.g. notify-followers)
+//   B. Authorization: Bearer <user_jwt> AND notification_id in body, where
+//      the notifications row exists with:
+//        recipient_user_id = user_id (push target)
+//        actor_user_id     = authenticated user (the caller)
+//
+// This prevents any authenticated user from pushing arbitrary text to
+// arbitrary users — the notification row acts as a proof-of-legitimacy.
+
 // ── POST ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // Verify caller has a valid Supabase session
-  const jwt = req.headers.get("Authorization")?.slice(7);
-  if (!jwt) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const db = adminDb();
-  const { data: { user }, error: authErr } = await db.auth.getUser(jwt);
-  if (authErr || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   let parsed: PushBody;
   try {
@@ -122,10 +128,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { user_id, title, body, data = {} } = parsed;
+  const { user_id, title, body, data = {}, notification_id } = parsed;
 
   if (!user_id || !title || !body) {
     return NextResponse.json({ error: "Missing user_id, title, or body" }, { status: 400 });
+  }
+
+  // ── Path A: internal server-to-server secret ──────────────────────────
+  const internalSecret = process.env.INTERNAL_PUSH_SECRET;
+  const providedSecret = req.headers.get("x-internal-push-secret");
+
+  if (internalSecret && providedSecret === internalSecret) {
+    // Trusted server-side call — no further auth needed, proceed to FCM
+  } else {
+    // ── Path B: user JWT + notification_id proof ─────────────────────
+    const jwt = req.headers.get("Authorization")?.slice(7);
+    if (!jwt) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: { user }, error: authErr } = await db.auth.getUser(jwt);
+    if (authErr || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!notification_id) {
+      return NextResponse.json(
+        { error: "notification_id is required for user-authenticated push requests" },
+        { status: 403 },
+      );
+    }
+
+    // Verify the notification row: recipient must be the push target,
+    // and actor must be the authenticated caller.
+    const { data: notifRow } = await db
+      .from("notifications")
+      .select("id")
+      .eq("id", notification_id)
+      .eq("recipient_user_id", user_id)
+      .eq("actor_user_id", user.id)
+      .maybeSingle();
+
+    if (!notifRow) {
+      return NextResponse.json(
+        { error: "Forbidden — notification_id does not match caller or recipient" },
+        { status: 403 },
+      );
+    }
   }
 
   // Look up enabled device tokens for the recipient
