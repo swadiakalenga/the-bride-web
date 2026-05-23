@@ -61,6 +61,8 @@ export default function LiveDiscoveryPage() {
           .from("church_live_events")
           .select(EVENT_COLS)
           .eq("status", "live")
+          // Guard: exclude rows where ended_at was set but status not updated
+          .is("ended_at", null)
           .order("started_at", { ascending: false })
           .limit(20),
         supabase
@@ -81,7 +83,16 @@ export default function LiveDiscoveryPage() {
       ]);
 
       if (!mounted) return;
-      setLiveNow((liveRes.data ?? []).map(normaliseEvent));
+
+      // Additional client-side stale guard: exclude live events older than 6 hours
+      const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+      const now = Date.now();
+      const freshLive = (liveRes.data ?? []).filter((ev) => {
+        const started = ev.started_at ? new Date(ev.started_at).getTime() : null;
+        return started === null || now - started <= SIX_HOURS_MS;
+      });
+
+      setLiveNow(freshLive.map(normaliseEvent));
       setScheduled((scheduledRes.data ?? []).map(normaliseEvent));
       setReplays((replayRes.data ?? []).map(normaliseEvent));
       setLoading(false);

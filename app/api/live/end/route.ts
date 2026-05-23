@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString();
   const { error: updateErr } = await db
     .from("church_live_events")
-    .update({ status: "ended", ended_at: now })
+    .update({ status: "ended", ended_at: now, replay_enabled: true })
     .eq("id", eventId);
 
   if (updateErr) {

@@ -814,16 +814,30 @@ export default function Feed() {
 
     const { data: rawStreams } = await supabase
       .from("church_live_events")
-      .select("id, title, church_id, viewer_count, status, replay_enabled")
+      .select("id, title, church_id, viewer_count, status, replay_enabled, ended_at, started_at")
       .in("church_id", uniqueIds)
       .in("status", ["live", "ended"])
       .order("started_at", { ascending: false })
       .limit(20);
 
-    // Keep: all live streams + ended streams with replay_enabled=true
-    const streams = (rawStreams || []).filter(
-      (s) => s.status === "live" || (s.status === "ended" && s.replay_enabled)
-    );
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    // Keep: genuinely live streams (no ended_at, not stale) + ended replays
+    const streams = (rawStreams || []).filter((s) => {
+      if (s.status === "ended") {
+        // Only show as replay if replay_enabled is explicitly true
+        return s.replay_enabled === true;
+      }
+      if (s.status === "live") {
+        // Stale guard 1: ended_at is set but status was never updated — treat as ended
+        if (s.ended_at) return false;
+        // Stale guard 2: stream is older than 6 hours — treat as stale, hide from LIVE NOW
+        if (s.started_at && now - new Date(s.started_at).getTime() > SIX_HOURS_MS) return false;
+        return true;
+      }
+      return false;
+    });
 
     if (streams.length === 0) { setLiveStreams([]); return; }
 
@@ -870,6 +884,7 @@ export default function Feed() {
         title: liveTitle.trim(),
         status: "live",
         started_at: new Date().toISOString(),
+        replay_enabled: true,
       }])
       .select("id")
       .single();
@@ -1435,27 +1450,16 @@ export default function Feed() {
 
           {/* Right: icons */}
           <div className="flex items-center gap-1">
-            {/* Go Live — church only */}
+            {/* Go Live — church only — routes to canonical manage page */}
             {myProfile?.role === "church_admin" && myProfile?.church_id && (
-              myActiveStreamId ? (
-                <button
-                  type="button"
-                  onClick={() => router.push(`/live/${myActiveStreamId}`)}
-                  className="flex h-8 items-center gap-1.5 rounded-full bg-red-500 px-3 text-xs font-bold text-white"
-                >
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-                  Live
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowGoLive(true)}
-                  className="flex h-8 items-center gap-1.5 rounded-full bg-brand-500 px-3 text-xs font-bold text-white"
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
-                  Go Live
-                </button>
-              )
+              <button
+                type="button"
+                onClick={() => router.push(`/church/${myProfile.church_id}/live/manage`)}
+                className="flex h-8 items-center gap-1.5 rounded-full bg-brand-500 px-3 text-xs font-bold text-white"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+                Go Live
+              </button>
             )}
 
             <button
@@ -2245,7 +2249,7 @@ export default function Feed() {
           {/* Right sidebar — desktop only */}
           <aside className="hidden lg:block lg:col-span-3">
             <div className="sticky top-[88px]">
-              <RightSidebar currentUserId={currentUserId} liveStreams={liveStreams} />
+              <RightSidebar currentUserId={currentUserId} liveStreams={liveStreams.filter((s) => s.status === "live")} />
             </div>
           </aside>
 
