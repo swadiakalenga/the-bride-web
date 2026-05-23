@@ -46,7 +46,7 @@ export default function Feed() {
   const [showCompose, setShowCompose] = useState(false);
   const [showGoLive, setShowGoLive] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [liveStreams, setLiveStreams] = useState<{ id: string; title: string; church_name: string | null; church_avatar: string | null; viewer_count: number }[]>([]);
+  const [liveStreams, setLiveStreams] = useState<{ id: string; title: string; church_name: string | null; church_avatar: string | null; viewer_count: number; status: string }[]>([]);
   const [myActiveStreamId, setMyActiveStreamId] = useState<string | null>(null);
   const [liveTitle, setLiveTitle] = useState("");
   const [startingLive, setStartingLive] = useState(false);
@@ -812,14 +812,20 @@ export default function Feed() {
     const uniqueIds = [...new Set(churchIds.filter(Boolean))];
     if (uniqueIds.length === 0) { setLiveStreams([]); return; }
 
-    const { data: streams } = await supabase
+    const { data: rawStreams } = await supabase
       .from("church_live_events")
-      .select("id, title, church_id, viewer_count")
+      .select("id, title, church_id, viewer_count, status, replay_enabled")
       .in("church_id", uniqueIds)
-      .eq("status", "live")
-      .order("started_at", { ascending: false });
+      .in("status", ["live", "ended"])
+      .order("started_at", { ascending: false })
+      .limit(20);
 
-    if (!streams || streams.length === 0) { setLiveStreams([]); return; }
+    // Keep: all live streams + ended streams with replay_enabled=true
+    const streams = (rawStreams || []).filter(
+      (s) => s.status === "live" || (s.status === "ended" && s.replay_enabled)
+    );
+
+    if (streams.length === 0) { setLiveStreams([]); return; }
 
     // Get church names
     const { data: churches } = await supabase
@@ -848,6 +854,7 @@ export default function Feed() {
       church_name: churchMap[s.church_id] || null,
       church_avatar: avatarMap[s.church_id] || null,
       viewer_count: s.viewer_count || 0,
+      status: s.status,
     })));
   }
 
@@ -1534,49 +1541,68 @@ export default function Feed() {
           </div>
         )}
 
-        {/* ── LIVE STREAMS (church feed only) ── */}
+        {/* ── LIVE STREAMS + REPLAYS (church feed only) ── */}
         {feedType === "church" && liveStreams.length > 0 && (
           <div className="mt-4">
             <div className="mb-2 flex items-center gap-2">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-              <span className="text-sm font-bold text-red-600 uppercase tracking-wide">Live Now</span>
+              {liveStreams.some((s) => s.status === "live") && (
+                <>
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                  <span className="text-sm font-bold text-red-600 uppercase tracking-wide">Live Now</span>
+                </>
+              )}
+              {!liveStreams.some((s) => s.status === "live") && (
+                <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Replays</span>
+              )}
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-              {liveStreams.map((stream) => (
-                <button
-                  key={stream.id}
-                  onClick={() => router.push(`/live/${stream.id}`)}
-                  className="relative flex-shrink-0 w-44 overflow-hidden rounded-2xl bg-gray-900 shadow-lg active:scale-95 transition-transform"
-                  style={{ height: "120px" }}
-                >
-                  {/* Dark gradient background */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-red-900/60 to-gray-900" />
+              {liveStreams.map((stream) => {
+                const isLiveNow = stream.status === "live";
+                return (
+                  <button
+                    key={stream.id}
+                    onClick={() => router.push(`/live/${stream.id}`)}
+                    className="relative flex-shrink-0 w-44 overflow-hidden rounded-2xl bg-gray-900 shadow-lg active:scale-95 transition-transform"
+                    style={{ height: "120px" }}
+                  >
+                    {/* Dark gradient background */}
+                    <div className={`absolute inset-0 bg-gradient-to-br ${isLiveNow ? "from-red-900/60 to-gray-900" : "from-gray-800/80 to-gray-900"}`} />
 
-                  {/* Church avatar */}
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
-                    {stream.church_avatar ? (
-                      <img src={stream.church_avatar} alt="" className="h-8 w-8 rounded-full border-2 border-red-500 object-cover" />
+                    {/* Church avatar */}
+                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                      {stream.church_avatar ? (
+                        <img src={stream.church_avatar} alt="" className={`h-8 w-8 rounded-full object-cover border-2 ${isLiveNow ? "border-red-500" : "border-gray-500"}`} />
+                      ) : (
+                        <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-gray-700 text-xs font-bold text-white ${isLiveNow ? "border-red-500" : "border-gray-500"}`}>
+                          {(stream.church_name || "C").charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status badge */}
+                    {isLiveNow ? (
+                      <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+                        <span className="text-[10px] font-bold text-white">LIVE</span>
+                      </div>
                     ) : (
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-red-500 bg-gray-700 text-xs font-bold text-white">
-                        {(stream.church_name || "C").charAt(0).toUpperCase()}
+                      <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-gray-600 px-2 py-0.5">
+                        <span className="text-[10px] font-bold text-white">REPLAY</span>
                       </div>
                     )}
-                  </div>
 
-                  {/* LIVE badge */}
-                  <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-                    <span className="text-[10px] font-bold text-white">LIVE</span>
-                  </div>
-
-                  {/* Bottom info */}
-                  <div className="absolute bottom-0 left-0 right-0 px-3 py-2" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
-                    <p className="truncate text-xs font-bold text-white">{stream.church_name}</p>
-                    <p className="truncate text-[10px] text-gray-300">{stream.title}</p>
-                    <p className="text-[10px] text-gray-400">👁 {stream.viewer_count} watching</p>
-                  </div>
-                </button>
-              ))}
+                    {/* Bottom info */}
+                    <div className="absolute bottom-0 left-0 right-0 px-3 py-2" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
+                      <p className="truncate text-xs font-bold text-white">{stream.church_name}</p>
+                      <p className="truncate text-[10px] text-gray-300">{stream.title}</p>
+                      {isLiveNow
+                        ? <p className="text-[10px] text-gray-400">👁 {stream.viewer_count} watching</p>
+                        : <p className="text-[10px] text-gray-400">▶ Watch Replay</p>
+                      }
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

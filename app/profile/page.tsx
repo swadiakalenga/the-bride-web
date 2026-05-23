@@ -583,6 +583,10 @@ export default function ProfilePage() {
                           className="flex items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 col-span-2">
                           📖 {lang === "fr" ? "Dévotions" : "Devotionals"}
                         </button>
+                        <button onClick={() => router.push(`/church/${myChurch.id}/live/manage`)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-50 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-100 col-span-2">
+                          📺 {lang === "fr" ? "Gérer le live" : "Manage Live"}
+                        </button>
                       </div>
 
                       {/* Logout */}

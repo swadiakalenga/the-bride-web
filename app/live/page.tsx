@@ -109,11 +109,11 @@ export default function LiveDiscoveryPage() {
           </div>
           {isAdmin && adminChurchId && (
             <button
-              onClick={() => router.push(`/live/create?church=${adminChurchId}`)}
+              onClick={() => router.push(`/church/${adminChurchId}/live/manage`)}
               className="flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1.5 text-sm font-bold text-white shadow hover:bg-red-600"
             >
               <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-              Schedule Stream
+              Manage Live
             </button>
           )}
         </div>

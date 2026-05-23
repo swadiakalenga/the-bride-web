@@ -14,6 +14,15 @@ type ReplayCard = {
   hls_url: string | null;
 };
 
+type ChurchPost = {
+  id: string;
+  content: string | null;
+  media_urls: string[] | null;
+  media_type: string | null;
+  author_name: string | null;
+  created_at: string;
+};
+
 type ChurchInfo = {
   id: string;
   name: string;
@@ -43,10 +52,6 @@ export default function ChurchProfilePage() {
   const [viewerRole,   setViewerRole]   = useState<string | null>(null);
   const [isAdmin,      setIsAdmin]      = useState(false);
 
-  // Raw profile values kept separately for the dev debug panel and for
-  // any logic that needs them independently of the isAdmin derived flag.
-  const [dbProfileRole,    setDbProfileRole]    = useState<string | null>(null);
-  const [dbProfileChurchId, setDbProfileChurchId] = useState<string | null>(null);
   const [isMember,     setIsMember]     = useState(false);
   const [memberCount,  setMemberCount]  = useState(0);
   const [pendingRequest, setPendingRequest] = useState(false);
@@ -60,6 +65,9 @@ export default function ChurchProfilePage() {
 
   // Replay cards (recent ended streams)
   const [recentReplays, setRecentReplays] = useState<ReplayCard[]>([]);
+
+  // Church posts
+  const [churchPosts, setChurchPosts] = useState<ChurchPost[]>([]);
 
   // Image upload state (admin only)
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -96,8 +104,6 @@ export default function ChurchProfilePage() {
     const rawChurchId = profile?.church_id ?? null;
 
     setViewerRole(rawRole);
-    setDbProfileRole(rawRole);
-    setDbProfileChurchId(rawChurchId);
 
     // Trim both sides to guard against whitespace / copy-paste artefacts in the DB.
     // Only grant admin when role AND church_id both match this exact church.
@@ -147,6 +153,16 @@ export default function ChurchProfilePage() {
       .limit(6);
 
     setRecentReplays((replayData ?? []) as ReplayCard[]);
+
+    // Load recent church posts
+    const { data: postsData } = await supabase
+      .from("posts")
+      .select("id, content, media_urls, media_type, author_name, created_at")
+      .eq("church_id", churchId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    setChurchPosts((postsData ?? []) as ChurchPost[]);
 
     setLoading(false);
   }
@@ -330,32 +346,6 @@ export default function ChurchProfilePage() {
                   <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{uploadError}</div>
                 )}
 
-                {/* ── Dev-only admin debug panel ─────────────────────────────
-                    Shows raw DB values so you can diagnose isAdmin failures.
-                    Automatically hidden in production (NODE_ENV !== development).
-                ──────────────────────────────────────────────────────────── */}
-                {process.env.NODE_ENV === "development" && (
-                  <div className="mt-3 rounded-xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-[11px] font-mono space-y-0.5 text-yellow-900">
-                    <p className="mb-1 font-bold text-yellow-800 text-xs">🛠 Admin check (dev only)</p>
-                    <p>profile.role &nbsp;&nbsp;&nbsp;&nbsp;= <span className="font-bold">{dbProfileRole ?? "null"}</span></p>
-                    <p>profile.church_id = <span className="font-bold">{dbProfileChurchId ?? "null"}</span></p>
-                    <p>church.id (url) &nbsp;= <span className="font-bold">{churchId}</span></p>
-                    <p>church.id (db) &nbsp;&nbsp;= <span className="font-bold">{church?.id ?? "null"}</span></p>
-                    <p>
-                      IDs match &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;={" "}
-                      <span className={`font-bold ${dbProfileChurchId?.trim() === churchId.trim() ? "text-green-700" : "text-red-700"}`}>
-                        {String(dbProfileChurchId?.trim() === churchId.trim())}
-                      </span>
-                    </p>
-                    <p>
-                      isAdmin &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;={" "}
-                      <span className={`font-bold ${isAdmin ? "text-green-700" : "text-red-700"}`}>
-                        {String(isAdmin)}
-                      </span>
-                    </p>
-                  </div>
-                )}
-
                 {/* Action buttons */}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {isAdmin ? (
@@ -469,6 +459,7 @@ export default function ChurchProfilePage() {
                     {isFr ? "Voir tout" : "See all"}
                   </button>
                 </div>
+
                 <div className="space-y-2">
                   {recentReplays.map((replay) => (
                     <button
@@ -517,6 +508,86 @@ export default function ChurchProfilePage() {
                 </div>
               </div>
             )}
+
+            {/* ── Church Posts ── */}
+            <div className="px-4 pt-6 pb-4">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
+                <span>📝</span>
+                {isFr ? "Publications" : "Posts"}
+              </h3>
+
+              {churchPosts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-100 bg-white py-10 text-center">
+                  <span className="text-3xl opacity-40">📢</span>
+                  <p className="mt-2 text-sm font-semibold text-gray-500">
+                    {isFr ? "Aucune publication pour l'instant" : "No posts yet"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    {isFr ? "Les publications de cette église apparaîtront ici." : "This church's posts will appear here."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {churchPosts.map((post) => {
+                    const firstImage = post.media_urls?.[0] ?? null;
+                    return (
+                      <button
+                        key={post.id}
+                        onClick={() => router.push(`/post/${post.id}`)}
+                        className="w-full overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm hover:shadow-md transition"
+                      >
+                        {/* Author + date row */}
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-gray-700 truncate">
+                            {post.author_name || church?.name || "Church"}
+                          </span>
+                          <span className="flex-shrink-0 text-[11px] text-gray-400">
+                            {new Date(post.created_at).toLocaleDateString([], {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+
+                        {/* Image thumbnail */}
+                        {firstImage && post.media_type !== "audio" && post.media_type !== "video" && (
+                          <div className="mb-2 overflow-hidden rounded-xl">
+                            <img
+                              src={firstImage}
+                              alt=""
+                              className="h-40 w-full object-cover"
+                            />
+                          </div>
+                        )}
+
+                        {/* Video placeholder */}
+                        {post.media_type === "video" && (
+                          <div className="mb-2 flex h-24 w-full items-center justify-center rounded-xl bg-gray-100 text-2xl">
+                            🎬
+                          </div>
+                        )}
+
+                        {/* Audio placeholder */}
+                        {post.media_type === "audio" && (
+                          <div className="mb-2 flex h-12 w-full items-center justify-center rounded-xl bg-gray-100 text-xl gap-2">
+                            <span>🎵</span>
+                            <span className="text-xs font-medium text-gray-500">{isFr ? "Audio" : "Audio"}</span>
+                          </div>
+                        )}
+
+                        {/* Content */}
+                        {post.content && (
+                          <p className="line-clamp-3 text-sm leading-relaxed text-gray-700">
+                            {post.content}
+                          </p>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

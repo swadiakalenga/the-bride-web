@@ -63,8 +63,6 @@ export default function UserProfilePage() {
   // Membership state
   const [membershipStatus, setMembershipStatus] = useState<"none" | "pending" | "member" | "rejected">("none");
   const [membershipLoading, setMembershipLoading] = useState(false);
-  const [isLive, setIsLive] = useState(false);
-  const [liveStreamId, setLiveStreamId] = useState<string | null>(null);
 
   // Posts section
   const [userPosts, setUserPosts] = useState<Post[]>([]);
@@ -211,15 +209,6 @@ export default function UserProfilePage() {
           .maybeSingle();
         setMembershipStatus((memData?.status as typeof membershipStatus) || "none");
 
-        // Check if church is currently live
-        const { data: liveData } = await supabase
-          .from("live_streams")
-          .select("id")
-          .eq("church_id", profileData.church_id)
-          .eq("status", "live")
-          .maybeSingle();
-        setIsLive(!!liveData);
-        setLiveStreamId(liveData?.id || null);
       }
     }
 
@@ -619,17 +608,6 @@ export default function UserProfilePage() {
 
                 {isChurchProfile && church?.pastor_name && (
                   <p className="mt-1 text-sm text-gray-500">Pastor: {church.pastor_name}</p>
-                )}
-
-                {/* Live badge */}
-                {isLive && liveStreamId && (
-                  <button
-                    onClick={() => router.push(`/live/${liveStreamId}`)}
-                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-2.5 font-bold text-white shadow-sm"
-                  >
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-                    LIVE NOW — Watch Stream
-                  </button>
                 )}
 
                 {/* Stats */}

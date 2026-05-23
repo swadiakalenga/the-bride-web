@@ -513,7 +513,7 @@ function GoLiveModal({ churchId, token, onClose, onCreated }: ModalProps) {
                     Scheduling…
                   </>
                 ) : (
-                  "Schedule Stream"
+                  "Schedule Live"
                 )}
               </button>
             </>
@@ -675,7 +675,7 @@ export default function ManageLivePage() {
             <section>
               <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-                Live Now
+                Currently Live
                 <span className="ml-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-red-500">
                   {liveNow.length}
                 </span>
@@ -701,7 +701,7 @@ export default function ManageLivePage() {
             <section>
               <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500">
                 <span>📅</span>
-                Scheduled
+                Scheduled Lives
                 <span className="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-gray-500">
                   {scheduled.length}
                 </span>
