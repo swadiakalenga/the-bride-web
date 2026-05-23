@@ -1022,15 +1022,24 @@ export default function Feed() {
     // ── Link preview detection ────────────────────────────────────────────────
     // Detect first URL in post content, fetch OG metadata server-side, and
     // persist preview fields so the card renders immediately on load.
-    // Never blocks the post — silently skipped if the fetch fails.
+    // Always saves link_url + link_domain when a URL is present.
+    // Full OG metadata is saved only when available — if the fetch returns
+    // nothing useful we still record the bare URL so the card can show a link.
+    // Never blocks the post — silently skipped if the URL or fetch fails.
     const firstUrl = extractFirstUrl(content.trim());
+    let linkFieldsIncluded = false;
     if (firstUrl) {
       try {
+        const domain = (() => {
+          try { return new URL(firstUrl).hostname.replace(/^www\./, ""); } catch { return null; }
+        })();
+
         const previewRes = await fetch("/api/link-preview", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: firstUrl }),
         });
+
         if (previewRes.ok) {
           const preview = (await previewRes.json()) as {
             title?: string | null;
@@ -1039,17 +1048,23 @@ export default function Feed() {
             siteName?: string | null;
             domain?: string | null;
           };
-          if (preview.title || preview.description || preview.image) {
-            postPayload.link_url         = firstUrl;
-            postPayload.link_title       = preview.title       ?? null;
-            postPayload.link_description = preview.description ?? null;
-            postPayload.link_image_url   = preview.image       ?? null;
-            postPayload.link_site_name   = preview.siteName    ?? null;
-            postPayload.link_domain      = preview.domain      ?? null;
-          }
+          // Always persist at minimum the bare URL + domain
+          postPayload.link_url         = firstUrl;
+          postPayload.link_domain      = preview.domain ?? domain ?? null;
+          postPayload.link_title       = preview.title       ?? null;
+          postPayload.link_description = preview.description ?? null;
+          postPayload.link_image_url   = preview.image       ?? null;
+          postPayload.link_site_name   = preview.siteName    ?? null;
+          linkFieldsIncluded = true;
+        } else {
+          console.error("[createPost] link-preview API returned", previewRes.status, "— saving bare URL");
+          postPayload.link_url    = firstUrl;
+          postPayload.link_domain = domain ?? null;
+          linkFieldsIncluded = true;
         }
-      } catch {
-        // Network/timeout — post without preview
+      } catch (previewErr) {
+        // Network/timeout — post without any preview fields
+        console.error("[createPost] link-preview fetch failed:", previewErr);
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
@@ -1059,10 +1074,34 @@ export default function Feed() {
     if (error) {
       console.error("[createPost] insert error:", error.message);
       console.error("[createPost] code:", error.code, "| details:", error.details, "| hint:", error.hint);
-      setPostStatus("failed");
-      const detail = error.hint ? `${error.message} — ${error.hint}` : error.message;
-      setErrorMessage(`Post failed: ${detail}`);
-      return;
+
+      // Fallback: if the insert failed and we tried to include link preview columns
+      // (which may not exist if the migration hasn't been run), retry without them
+      // so the post is never silently lost.
+      if (linkFieldsIncluded) {
+        console.warn("[createPost] retrying without link preview fields (migration may not be applied)");
+        const payloadWithoutLinks = { ...postPayload };
+        delete payloadWithoutLinks.link_url;
+        delete payloadWithoutLinks.link_domain;
+        delete payloadWithoutLinks.link_title;
+        delete payloadWithoutLinks.link_description;
+        delete payloadWithoutLinks.link_image_url;
+        delete payloadWithoutLinks.link_site_name;
+        const { error: retryError } = await supabase.from("posts").insert([payloadWithoutLinks]);
+        if (retryError) {
+          console.error("[createPost] retry also failed:", retryError.message);
+          setPostStatus("failed");
+          const detail = retryError.hint ? `${retryError.message} — ${retryError.hint}` : retryError.message;
+          setErrorMessage(`Post failed: ${detail}`);
+          return;
+        }
+        // Retry succeeded — continue with post-insert cleanup below
+      } else {
+        setPostStatus("failed");
+        const detail = error.hint ? `${error.message} — ${error.hint}` : error.message;
+        setErrorMessage(`Post failed: ${detail}`);
+        return;
+      }
     }
 
     setPostStatus("idle");
@@ -1177,13 +1216,19 @@ export default function Feed() {
       confirmLabel: lang === "fr" ? "Supprimer" : "Delete",
       onConfirm: async () => {
         setConfirmDialog(null);
+        // Immediate optimistic removal — UI updates without waiting for a reload
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
         const { error } = await supabase
           .from("posts")
           .delete()
           .eq("id", postId)
           .eq("user_id", currentUserId!);
-        if (error) { setErrorMessage(`Delete failed: ${error.message}`); return; }
-        loadPosts();
+        if (error) {
+          setErrorMessage(`Delete failed: ${error.message}`);
+          // Revert by re-fetching if the delete failed
+          void loadPosts();
+          return;
+        }
       },
     });
   };
@@ -1357,7 +1402,7 @@ export default function Feed() {
     loadUnreadNotificationCount();
   };
 
-  const deleteComment = (commentId: string) => {
+  const deleteComment = (commentId: string, postId: string) => {
     if (!currentUserId) return;
     setConfirmDialog({
       title: lang === "fr" ? "Supprimer le commentaire" : "Delete comment",
@@ -1367,13 +1412,22 @@ export default function Feed() {
       confirmLabel: lang === "fr" ? "Supprimer" : "Delete",
       onConfirm: async () => {
         setConfirmDialog(null);
+        // Immediate optimistic removal from the relevant post's comment list
+        setCommentsByPost((prev) => ({
+          ...prev,
+          [postId]: (prev[postId] ?? []).filter((c) => c.id !== commentId),
+        }));
         const { error } = await supabase
           .from("comments")
           .delete()
           .eq("id", commentId)
           .eq("user_id", currentUserId!);
-        if (error) { setErrorMessage(`Delete comment failed: ${error.message}`); return; }
-        loadPosts();
+        if (error) {
+          setErrorMessage(`Delete comment failed: ${error.message}`);
+          // Revert by re-fetching comments for this post
+          void loadPosts();
+          return;
+        }
       },
     });
   };
@@ -2186,7 +2240,7 @@ export default function Feed() {
                                           </button>
 
                                           {currentUserId === comment.user_id && (
-                                            <button onClick={() => deleteComment(comment.id)} className="text-red-400 hover:text-red-600">
+                                            <button onClick={() => deleteComment(comment.id, post.id)} className="text-red-400 hover:text-red-600">
                                               Delete
                                             </button>
                                           )}
@@ -2219,7 +2273,7 @@ export default function Feed() {
                                                       </button>
 
                                                       {currentUserId === reply.user_id && (
-                                                        <button onClick={() => deleteComment(reply.id)} className="text-red-400 hover:text-red-600">
+                                                        <button onClick={() => deleteComment(reply.id, post.id)} className="text-red-400 hover:text-red-600">
                                                           Delete
                                                         </button>
                                                       )}

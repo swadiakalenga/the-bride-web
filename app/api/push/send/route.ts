@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
 
   if (internalSecret && providedSecret === internalSecret) {
     // Trusted server-side call — no further auth needed, proceed to FCM
+    console.log("[push] auth mode: internal | target user:", user_id);
   } else {
     // ── Path B: user JWT + notification_id proof ─────────────────────
     const jwt = req.headers.get("Authorization")?.slice(7);
@@ -175,6 +176,7 @@ export async function POST(req: NextRequest) {
         { status: 403 },
       );
     }
+    console.log("[push] auth mode: notification_id | target user:", user_id);
   }
 
   // Look up enabled device tokens for the recipient
@@ -190,8 +192,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (!tokens || tokens.length === 0) {
+    console.log("[push] no enabled tokens for user:", user_id);
     return NextResponse.json({ sent: 0, reason: "no_tokens" });
   }
+
+  console.log("[push] token count:", tokens.length, "| user:", user_id);
 
   // FCM env vars — skip silently when not yet configured (e.g. local dev)
   if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
@@ -255,6 +260,8 @@ export async function POST(req: NextRequest) {
 
   const sent   = results.filter((r) => r.status === "fulfilled").length;
   const failed = results.filter((r) => r.status === "rejected").length;
+
+  console.log("[push] result: sent", sent, "failed", failed, "total", tokens.length, "| user:", user_id);
 
   return NextResponse.json({ sent, failed, total: tokens.length });
 }

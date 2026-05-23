@@ -195,17 +195,30 @@ export default function ChatPage() {
     const tick = async () => {
       if (document.hidden) return;
       if (pollingRef.current) return;
-      const cursor = latestCursorRef.current;
-      if (!cursor) return;
 
       pollingRef.current = true;
       try {
-        const fresh = await loadNewMessagesSince(conversationId, cursor);
-        if (fresh.length > 0) {
+        // Full sync — detects new messages, edits, AND deletes from the other device
+        const latest = await loadLatestMessages(conversationId, MSG_PAGE);
+        if (latest.length > 0) {
           setMessages((prev) => {
-            const merged = mergeMessages(prev, fresh);
-            latestCursorRef.current = getLatestMessageCursor(merged) ?? cursor;
-            return merged;
+            const latestIds = new Set(latest.map((m) => m.id));
+            // Keep pending (optimistic) messages that haven't been confirmed yet
+            const pendingMsgs = prev.filter((m) => m.pending);
+            // Remove pending whose content was confirmed by the server
+            const confirmedPending = pendingMsgs.filter(
+              (p) => !latest.some((m) => m.sender_id === p.sender_id && m.content === p.content),
+            );
+            // Remove messages that no longer exist in DB (deleted by other device)
+            // but keep any still-pending optimistic ones
+            const serverMsgs = prev
+              .filter((m) => !m.pending)
+              .filter((m) => latestIds.has(m.id));
+            // Merge server snapshot (which also updates edited content)
+            const merged = mergeMessages(serverMsgs, latest);
+            const next = [...merged, ...confirmedPending];
+            latestCursorRef.current = getLatestMessageCursor(next) ?? latestCursorRef.current;
+            return next;
           });
         }
       } catch {
@@ -230,16 +243,21 @@ export default function ChatPage() {
         const { App: CapApp } = await import("@capacitor/app");
         const handle = await CapApp.addListener("appStateChange", async ({ isActive }) => {
           if (!isActive) return;
-          const cursor = latestCursorRef.current;
-          if (!cursor) return;
 
           try {
-            const fresh = await loadNewMessagesSince(conversationId, cursor);
-            if (fresh.length > 0) {
+            // Full sync on app resume — catches deletes and edits that occurred while backgrounded
+            const latest = await loadLatestMessages(conversationId, MSG_PAGE);
+            if (latest.length > 0) {
               setMessages((prev) => {
-                const merged = mergeMessages(prev, fresh);
-                latestCursorRef.current = getLatestMessageCursor(merged) ?? cursor;
-                return merged;
+                const latestIds = new Set(latest.map((m) => m.id));
+                const pendingMsgs = prev.filter((m) => m.pending).filter(
+                  (p) => !latest.some((m) => m.sender_id === p.sender_id && m.content === p.content),
+                );
+                const serverMsgs = prev.filter((m) => !m.pending).filter((m) => latestIds.has(m.id));
+                const merged = mergeMessages(serverMsgs, latest);
+                const next = [...merged, ...pendingMsgs];
+                latestCursorRef.current = getLatestMessageCursor(next) ?? latestCursorRef.current;
+                return next;
               });
             }
           } catch {
@@ -456,6 +474,16 @@ export default function ChatPage() {
             prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)),
           );
           void loadSidebarConversations(me);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "messages", filter: `conversation_id=eq.${convId}` },
+        (payload) => {
+          const deletedId = (payload.old as { id: string }).id;
+          if (deletedId) {
+            setMessages((prev) => prev.filter((m) => m.id !== deletedId));
+          }
         },
       )
       .subscribe();
