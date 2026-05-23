@@ -359,18 +359,9 @@ export default function ChurchProfilePage() {
                 {/* Action buttons */}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {isAdmin ? (
-                    <>
-                      <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-600">
-                        {isFr ? "Admin de l'église" : "Church Admin"}
-                      </div>
-                      <button
-                        onClick={() => router.push(`/church/${churchId}/live/manage`)}
-                        className="flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-                      >
-                        <span>📺</span>
-                        {isFr ? "Gérer le live" : "Manage Live"}
-                      </button>
-                    </>
+                    <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-600">
+                      {isFr ? "Admin de l'église" : "Church Admin"}
+                    </div>
                   ) : viewerRole === "church_admin" && !isAdmin ? (
                     /* A church admin viewing a DIFFERENT church — they can't join/follow as a member */
                     <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-2 text-xs text-gray-500 max-w-xs">
