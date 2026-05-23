@@ -15,6 +15,8 @@ import {
   loadNewMessagesSince,
   sendMessage as svcSendMessage,
   markConversationRead,
+  editMessage as editMessageSvc,
+  deleteMessage as deleteMessageSvc,
 } from "../../../lib/messaging/messageService";
 import {
   mergeMessages,
@@ -115,6 +117,9 @@ export default function ChatPage() {
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editInput, setEditInput] = useState("");
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -277,6 +282,17 @@ export default function ChatPage() {
     };
   }, [showMediaMenu]);
 
+  // ── Close message context menu on outside click ──────────────────────────
+
+  useEffect(() => {
+    if (!activeMenuId) return;
+    const close = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-msg-bubble]")) setActiveMenuId(null);
+    };
+    const timer = setTimeout(() => document.addEventListener("mousedown", close), 0);
+    return () => { clearTimeout(timer); document.removeEventListener("mousedown", close); };
+  }, [activeMenuId]);
+
   // ── Page bootstrap ────────────────────────────────────────────────────────
 
   async function loadPage(isMounted: () => boolean) {
@@ -437,11 +453,7 @@ export default function ChatPage() {
         (payload) => {
           const updated = payload.new as ChatMessage;
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === updated.id
-                ? { ...m, is_read: updated.is_read, read_at: updated.read_at }
-                : m,
-            ),
+            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)),
           );
           void loadSidebarConversations(me);
         },
@@ -607,6 +619,36 @@ export default function ChatPage() {
     }
     setBlockLoading(false);
     setShowBlockConfirm(false);
+  };
+
+  // ── Edit / Delete message handlers ───────────────────────────────────────
+
+  const handleSaveEdit = async (messageId: string) => {
+    const text = editInput.trim();
+    if (!text) { setEditingMessageId(null); return; }
+    try {
+      await editMessageSvc(messageId, text);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, content: text, is_edited: true, edited_at: new Date().toISOString() }
+            : m,
+        ),
+      );
+    } catch {
+      setUiMessage(lang === "fr" ? "Impossible de modifier le message." : "Failed to edit message.");
+    }
+    setEditingMessageId(null);
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    setActiveMenuId(null);
+    try {
+      await deleteMessageSvc(messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    } catch {
+      setUiMessage(lang === "fr" ? "Impossible de supprimer le message." : "Failed to delete message.");
+    }
   };
 
   const renderMediaContent = (msg: ChatMessage, isMe: boolean) => {
@@ -874,39 +916,109 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    <div className={`flex max-w-[75%] flex-col ${isMe ? "items-end" : "items-start"}`}>
+                    <div
+                      data-msg-bubble
+                      className={`flex max-w-[75%] flex-col ${isMe ? "items-end" : "items-start"}`}
+                      onClick={() => {
+                        if (isMe && !msg.pending && !msg.failed && !hasMedia && !editingMessageId) {
+                          setActiveMenuId((prev) => (prev === msg.id ? null : msg.id));
+                        }
+                      }}
+                    >
                       {hasMedia && (
                         <div className={`mb-1 overflow-hidden rounded-2xl ${dimmed ? "opacity-60" : ""}`}>
                           {renderMediaContent(msg, isMe)}
                         </div>
                       )}
 
-                      {(!hasMedia || (msg.content && !["Sent a photo", "Sent a video", "Sent an audio message"].includes(msg.content))) && (
+                      {editingMessageId === msg.id ? (
                         <div
-                          className={`break-words px-4 py-2.5 text-sm leading-relaxed ${
-                            msg.failed
-                              ? "bg-red-100 text-red-700"
-                              : isMe ? "bg-amber-400 text-white" : "bg-gray-100 text-gray-900"
-                          } ${
-                            isMe
-                              ? isFirstInGroup && isLastInGroup ? "rounded-[20px]"
-                                : isFirstInGroup ? "rounded-[20px] rounded-br-md"
-                                : isLastInGroup ? "rounded-[20px] rounded-tr-md"
-                                : "rounded-[20px] rounded-r-md"
-                              : isFirstInGroup && isLastInGroup ? "rounded-[20px]"
-                                : isFirstInGroup ? "rounded-[20px] rounded-bl-md"
-                                : isLastInGroup ? "rounded-[20px] rounded-tl-md"
-                                : "rounded-[20px] rounded-l-md"
-                          } ${dimmed ? "opacity-60" : "opacity-100"}`}
+                          className="flex flex-col items-end gap-1.5"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          {msg.content}
-                          {msg.failed && <span className="ml-2 text-[10px] text-red-500">Failed</span>}
+                          <input
+                            autoFocus
+                            value={editInput}
+                            onChange={(e) => setEditInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); void handleSaveEdit(msg.id); }
+                              if (e.key === "Escape") setEditingMessageId(null);
+                            }}
+                            className="rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none focus:border-amber-400"
+                            style={{ minWidth: "160px" }}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => void handleSaveEdit(msg.id)}
+                              className="rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white hover:bg-amber-500"
+                            >
+                              {lang === "fr" ? "Enregistrer" : "Save"}
+                            </button>
+                            <button
+                              onClick={() => setEditingMessageId(null)}
+                              className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-200"
+                            >
+                              {lang === "fr" ? "Annuler" : "Cancel"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        (!hasMedia || (msg.content && !["Sent a photo", "Sent a video", "Sent an audio message"].includes(msg.content))) && (
+                          <div
+                            className={`break-words px-4 py-2.5 text-sm leading-relaxed ${
+                              msg.failed
+                                ? "bg-red-100 text-red-700"
+                                : isMe ? "bg-amber-400 text-white" : "bg-gray-100 text-gray-900"
+                            } ${
+                              isMe
+                                ? isFirstInGroup && isLastInGroup ? "rounded-[20px]"
+                                  : isFirstInGroup ? "rounded-[20px] rounded-br-md"
+                                  : isLastInGroup ? "rounded-[20px] rounded-tr-md"
+                                  : "rounded-[20px] rounded-r-md"
+                                : isFirstInGroup && isLastInGroup ? "rounded-[20px]"
+                                  : isFirstInGroup ? "rounded-[20px] rounded-bl-md"
+                                  : isLastInGroup ? "rounded-[20px] rounded-tl-md"
+                                  : "rounded-[20px] rounded-l-md"
+                            } ${dimmed ? "opacity-60" : "opacity-100"} ${isMe && !msg.pending && !msg.failed && !hasMedia ? "cursor-pointer select-none" : ""}`}
+                          >
+                            {msg.content}
+                            {msg.failed && <span className="ml-2 text-[10px] text-red-500">Failed</span>}
+                          </div>
+                        )
+                      )}
+
+                      {isMe && activeMenuId === msg.id && !msg.pending && !msg.failed && (
+                        <div
+                          className="mt-1 flex items-center gap-1.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => { setEditInput(msg.content); setEditingMessageId(msg.id); setActiveMenuId(null); }}
+                            className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                          >
+                            {lang === "fr" ? "Modifier" : "Edit"}
+                          </button>
+                          <button
+                            onClick={() => void handleDeleteMessage(msg.id)}
+                            className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-500 shadow-sm hover:bg-red-50"
+                          >
+                            {lang === "fr" ? "Supprimer" : "Delete"}
+                          </button>
+                          <button
+                            onClick={() => setActiveMenuId(null)}
+                            className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-400 hover:bg-gray-200"
+                          >
+                            ✕
+                          </button>
                         </div>
                       )}
 
                       {isLastInGroup && (
                         <div className={`mt-1 flex items-center gap-1 text-[10px] text-gray-400 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                           <span>{formatTime(msg.created_at)}</span>
+                          {isMe && msg.is_edited && !msg.pending && !msg.failed && (
+                            <span className="italic text-gray-400">{lang === "fr" ? "modifié" : "edited"}</span>
+                          )}
                           {isMe && !msg.pending && !msg.failed && (
                             <span className={(msg.read_at ?? msg.is_read) ? "text-amber-500" : "text-gray-400"}>
                               {(msg.read_at ?? msg.is_read) ? "✓✓" : "✓"}

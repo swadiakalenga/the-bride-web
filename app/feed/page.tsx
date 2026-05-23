@@ -60,6 +60,7 @@ export default function Feed() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [myProfile, setMyProfile] = useState<Profile | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
 
   // Pagination
@@ -266,6 +267,31 @@ export default function Feed() {
     setUnreadNotificationCount(count || 0);
   }
 
+  async function loadUnreadMessageCount(me: string) {
+    // Get conversation IDs this user participates in
+    const { data: participations } = await supabase
+      .from("conversation_participants")
+      .select("conversation_id")
+      .eq("user_id", me);
+
+    if (!participations || participations.length === 0) {
+      setUnreadMessageCount(0);
+      return;
+    }
+
+    const convIds = participations.map((p) => p.conversation_id as string);
+
+    // Count unread messages in those conversations not sent by me
+    const { count } = await supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .in("conversation_id", convIds)
+      .neq("sender_id", me)
+      .eq("is_read", false);
+
+    setUnreadMessageCount(count ?? 0);
+  }
+
   const clearFeedState = () => {
     setPosts([]);
     setCommentsByPost({});
@@ -306,6 +332,7 @@ export default function Feed() {
     }
 
     setMyProfile(me || null);
+    void loadUnreadMessageCount(uid);
 
     // Church admins default to church feed and check for active stream
     if (me?.role === "church_admin" && me?.church_id) {
@@ -1462,15 +1489,22 @@ export default function Feed() {
               </button>
             )}
 
-            <button
-              onClick={() => router.push("/messages")}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
-              aria-label="Messages"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-              </svg>
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => router.push("/messages")}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="Messages"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                </svg>
+              </button>
+              {unreadMessageCount > 0 && (
+                <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-0.5 text-[10px] font-bold leading-none text-white">
+                  {unreadMessageCount > 9 ? "9+" : unreadMessageCount}
+                </span>
+              )}
+            </div>
 
             <button
               onClick={() => router.push("/search")}
@@ -2070,17 +2104,6 @@ export default function Feed() {
                                 Delete
                               </button>
                             </>
-                          )}
-                          {currentUserId && post.user_id !== currentUserId && !blockedUserIds.has(post.user_id) && (
-                            <button
-                              onClick={() => blockUser(post.user_id)}
-                              className="rounded-full px-2.5 py-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                              title={lang === "fr" ? "Bloquer" : "Block"}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                              </svg>
-                            </button>
                           )}
                         </div>
                       </div>

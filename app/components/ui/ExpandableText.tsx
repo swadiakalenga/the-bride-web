@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { linkifyNodes } from "./LinkifiedText";
 
 type ExpandableTextProps = {
   text: string;
@@ -18,7 +19,7 @@ export default function ExpandableText({
   const [expanded, setExpanded] = useState(false);
 
   if (!text || text.length <= limit) {
-    return <p className={className}>{text}</p>;
+    return <p className={className}>{linkifyNodes(text)}</p>;
   }
 
   const seeMore = lang === "fr" ? "Voir plus…" : "See more…";
@@ -26,7 +27,7 @@ export default function ExpandableText({
 
   return (
     <p className={className}>
-      {expanded ? text : text.slice(0, limit).trimEnd() + "…"}
+      {expanded ? linkifyNodes(text) : linkifyNodes(text.slice(0, limit).trimEnd() + "…")}
       {" "}
       <button
         type="button"

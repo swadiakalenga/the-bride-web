@@ -12,6 +12,7 @@ import MediaGrid from "../../components/feed/MediaGrid";
 import MediaPlayer from "../../components/feed/MediaPlayer";
 import type { Post, Comment } from "../../../lib/types";
 import { checkContentGuidelines } from "../../../lib/types";
+import LinkifiedText from "../../components/ui/LinkifiedText";
 
 type LikeRow = {
   post_id: string;
@@ -40,6 +41,9 @@ export default function PostPage() {
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [showReplyBox, setShowReplyBox] = useState<Record<string, boolean>>({});
   const tempIdCounter = useRef(0);
+
+  const [editingPost, setEditingPost] = useState(false);
+  const [editPostContent, setEditPostContent] = useState("");
 
   useEffect(() => {
     loadPage();
@@ -262,6 +266,44 @@ export default function PostPage() {
     }
   };
 
+  const handleSavePostEdit = async () => {
+    const text = editPostContent.trim();
+    if (!text || !post) { setEditingPost(false); return; }
+
+    const guidelines = checkContentGuidelines(text);
+    if (!guidelines.ok) { setUiMessage(guidelines.message); return; }
+
+    const { error } = await supabase
+      .from("posts")
+      .update({ content: text })
+      .eq("id", postId);
+
+    if (error) {
+      setUiMessage(`Edit failed: ${error.message}`);
+      return;
+    }
+
+    setPost({ ...post, content: text });
+    setEditingPost(false);
+  };
+
+  const handleDeletePost = async () => {
+    if (!post) return;
+    if (!window.confirm("Delete this post?")) return;
+
+    const { error } = await supabase
+      .from("posts")
+      .delete()
+      .eq("id", postId);
+
+    if (error) {
+      setUiMessage(`Delete failed: ${error.message}`);
+      return;
+    }
+
+    router.push("/feed");
+  };
+
   const topLevelComments = useMemo(
     () => comments.filter((comment) => !comment.parent_comment_id),
     [comments]
@@ -332,17 +374,62 @@ export default function PostPage() {
         )}
 
         <Card>
-          <button
-            onClick={() => goToUser(post.user_id)}
-            className="text-left font-semibold text-gray-900 hover:underline"
-          >
-            {post.author_name || "Unknown"}
-          </button>
+          <div className="flex items-start justify-between gap-2">
+            <button
+              onClick={() => goToUser(post.user_id)}
+              className="text-left font-semibold text-gray-900 hover:underline"
+            >
+              {post.author_name || "Unknown"}
+            </button>
+            {currentUserId === post.user_id && !editingPost && (
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  onClick={() => { setEditingPost(true); setEditPostContent(post.content); }}
+                  className="rounded-full px-2.5 py-1 text-xs font-semibold text-gray-400 hover:bg-gray-100 hover:text-brand-500"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={handleDeletePost}
+                  className="rounded-full px-2.5 py-1 text-xs font-semibold text-gray-400 hover:bg-gray-100 hover:text-red-500"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
 
-          {post.content && (
-            <p className="mt-2 whitespace-pre-wrap text-[15px] leading-6 text-gray-800">
-              {post.content}
-            </p>
+          {editingPost ? (
+            <div className="mt-2 space-y-2">
+              <textarea
+                autoFocus
+                value={editPostContent}
+                onChange={(e) => setEditPostContent(e.target.value)}
+                rows={4}
+                className="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-amber-400 resize-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSavePostEdit}
+                  className="rounded-full bg-amber-400 px-4 py-1.5 text-xs font-bold text-white hover:bg-amber-500"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingPost(false)}
+                  className="rounded-full bg-gray-100 px-4 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            post.content && (
+              <LinkifiedText
+                text={post.content}
+                className="mt-2 whitespace-pre-wrap text-[15px] leading-6 text-gray-800"
+              />
+            )
           )}
 
           {post.media_type === "photo" && post.media_urls && post.media_urls.length > 0 && (

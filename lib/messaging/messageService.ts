@@ -2,7 +2,7 @@ import { supabase } from "../supabase";
 import type { ChatMessage } from "../types";
 
 const MSG_COLS =
-  "id, conversation_id, sender_id, content, media_url, media_type, created_at, is_read, read_at";
+  "id, conversation_id, sender_id, content, media_url, media_type, created_at, is_read, read_at, is_edited, edited_at";
 
 export async function loadLatestMessages(
   conversationId: string,
@@ -95,6 +95,37 @@ export async function sendMessage(params: SendMessageParams): Promise<ChatMessag
   }
 
   return data as ChatMessage;
+}
+
+export async function editMessage(
+  messageId: string,
+  newContent: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("messages")
+    .update({
+      content:   newContent,
+      is_edited: true,
+      edited_at: new Date().toISOString(),
+    })
+    .eq("id", messageId);
+
+  if (error) {
+    console.error("[message-module] editMessage error", error.message);
+    throw error;
+  }
+}
+
+export async function deleteMessage(messageId: string): Promise<void> {
+  const { error } = await supabase
+    .from("messages")
+    .delete()
+    .eq("id", messageId);
+
+  if (error) {
+    console.error("[message-module] deleteMessage error", error.message);
+    throw error;
+  }
 }
 
 export async function markConversationRead(

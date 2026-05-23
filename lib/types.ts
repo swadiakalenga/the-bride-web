@@ -37,6 +37,8 @@ export type ChatMessage = {
   read_at?: string | null;
   media_url?: string | null;
   media_type?: string | null; // 'image' | 'video' | 'audio'
+  is_edited?: boolean;
+  edited_at?: string | null;
   pending?: boolean;
   failed?: boolean;
 };
