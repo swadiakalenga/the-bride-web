@@ -143,6 +143,37 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* ── Help & Support ── */}
+      <div>
+        <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          {isFr ? "Aide" : "Help"}
+        </p>
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <Link
+            href="/help"
+            className="flex items-center justify-between px-5 py-4 transition-colors hover:bg-gray-50"
+          >
+            <div>
+              <p className="font-semibold text-gray-900">
+                {isFr ? "Aide & Support" : "Help & Support"}
+              </p>
+              <p className="mt-0.5 text-sm text-gray-500">
+                {isFr ? "Signaler un problème ou contacter le support" : "Report a problem or contact support"}
+              </p>
+            </div>
+            <svg className="ml-4 shrink-0 text-gray-400" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </Link>
+        </div>
+        <p className="mt-2 px-1 text-xs text-gray-400">
+          {isFr ? "Besoin d'aide ? " : "Need help? "}
+          <Link href="/help" className="font-medium text-amber-600 hover:underline">
+            {isFr ? "Contacter le support" : "Contact Support"}
+          </Link>
+        </p>
+      </div>
+
       {/* ── Sign out ── */}
       <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <button

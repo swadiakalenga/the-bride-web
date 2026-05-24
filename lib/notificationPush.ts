@@ -51,6 +51,8 @@ function buildPushPayload(type: string, actorName: string): PushPayload {
     // Church livestream
     church_live_started:    { title: "🔴 Your church is live!", body: `Join the stream now` },
     church_live_scheduled:  { title: "📅 Stream scheduled",     body: `A new live event has been scheduled` },
+    // Support
+    support_response:       { title: "Support replied to your ticket", body: "View the response in Help & Support" },
   };
   return map[type] ?? { title: "TheBride", body: "You have a new notification" };
 }
