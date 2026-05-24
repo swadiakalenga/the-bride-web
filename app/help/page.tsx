@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { useLanguage } from "../../lib/useLanguage";
+import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
 
 const CATEGORIES = [
   "bug",
@@ -51,6 +52,7 @@ type Ticket = {
 };
 
 export default function HelpPage() {
+  useRedirectIfPlatformAdmin();
   const { t } = useLanguage();
   const { lang } = useLanguage();
   const router = useRouter();

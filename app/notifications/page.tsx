@@ -10,8 +10,10 @@ import Spinner from "../components/ui/Spinner";
 import Button from "../components/ui/Button";
 import BottomNav from "../components/ui/BottomNav";
 import type { NotificationItem } from "../../lib/types";
+import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
 
 export default function NotificationsPage() {
+  useRedirectIfPlatformAdmin();
   const router = useRouter();
   const { t } = useLanguage();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);

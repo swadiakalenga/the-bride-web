@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
+import { useRedirectIfPlatformAdmin } from "../../../lib/auth/redirectIfPlatformAdmin";
 
 const fr = {
   title: "Compte et suppression",
@@ -74,6 +75,7 @@ function formatDate(iso: string, lang: "fr" | "en") {
 }
 
 export default function AccountSettingsPage() {
+  useRedirectIfPlatformAdmin();
   const { lang } = useLanguage();
   const c = lang === "fr" ? fr : en;
   const router = useRouter();

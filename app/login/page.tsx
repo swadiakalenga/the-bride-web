@@ -63,7 +63,14 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = "/feed";
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (uid) {
+      const { data: prof } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
+      window.location.href = prof?.role === "platform_admin" ? "/admin" : "/feed";
+    } else {
+      window.location.href = "/feed";
+    }
   };
 
   // ── Email OTP — send code ─────────────────────────────────────────────────
@@ -123,7 +130,14 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = "/feed";
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (uid) {
+      const { data: prof } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
+      window.location.href = prof?.role === "platform_admin" ? "/admin" : "/feed";
+    } else {
+      window.location.href = "/feed";
+    }
   };
 
   const handleResend = () => {

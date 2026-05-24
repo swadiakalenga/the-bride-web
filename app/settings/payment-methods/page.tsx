@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
+import { useRedirectIfPlatformAdmin } from "../../../lib/auth/redirectIfPlatformAdmin";
 
 const AddCardSection = dynamic(() => import("../../components/payments/AddCardSection"), { ssr: false });
 
@@ -32,6 +33,7 @@ function CardIcon({ brand }: { brand: string | null }) {
 }
 
 export default function PaymentMethodsPage() {
+  useRedirectIfPlatformAdmin();
   const { lang } = useLanguage();
   const isFr = lang === "fr";
 

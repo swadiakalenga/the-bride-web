@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
 import BottomNav from "../components/ui/BottomNav";
 import EmptyState from "../components/ui/EmptyState";
 
@@ -22,6 +23,7 @@ type Church = {
 };
 
 export default function SearchPage() {
+  useRedirectIfPlatformAdmin();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"people" | "churches">("people");

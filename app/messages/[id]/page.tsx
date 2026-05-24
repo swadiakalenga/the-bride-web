@@ -23,6 +23,7 @@ import {
   replaceOptimisticMessage,
   getLatestMessageCursor,
 } from "../../../lib/messaging/messageState";
+import { useRedirectIfPlatformAdmin } from "../../../lib/auth/redirectIfPlatformAdmin";
 
 type OtherUser = {
   id: string;
@@ -94,6 +95,7 @@ const POLL_INTERVAL_MS = 3000;
 const MSG_PAGE = 50;
 
 export default function ChatPage() {
+  useRedirectIfPlatformAdmin();
   const params = useParams();
   const router = useRouter();
   const { lang } = useLanguage();

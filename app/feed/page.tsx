@@ -338,6 +338,13 @@ export default function Feed() {
     }
 
     setMyProfile(me || null);
+
+    // platform_admin accounts do not use the social app
+    if (me?.role === "platform_admin") {
+      router.replace("/admin");
+      return;
+    }
+
     void loadUnreadMessageCount(uid);
 
     // Church admins default to church feed and check for active stream
@@ -621,6 +628,7 @@ export default function Feed() {
 
   const toggleShare = async (postId: string) => {
     if (!currentUserId) return;
+    if (myProfile?.role === "platform_admin") return;
     const alreadyShared = userShares[postId];
 
     setUserShares((prev) => ({ ...prev, [postId]: !alreadyShared }));
@@ -954,6 +962,11 @@ export default function Feed() {
       return;
     }
 
+    if (myProfile.role === "platform_admin") {
+      setErrorMessage("Platform admin accounts cannot create posts.");
+      return;
+    }
+
     // Strict feed separation
     if (myProfile.role === "church_admin" && feedType === "people") {
       setErrorMessage("Church accounts can only post in the Church feed.");
@@ -1155,6 +1168,7 @@ export default function Feed() {
 
   const toggleLike = async (postId: string) => {
     if (!currentUserId) return;
+    if (myProfile?.role === "platform_admin") return;
 
     const wasLiked = userLikes[postId];
 
@@ -1194,6 +1208,7 @@ export default function Feed() {
 
   const toggleCommentLike = async (commentId: string) => {
     if (!currentUserId) return;
+    if (myProfile?.role === "platform_admin") return;
 
     const wasLiked = commentUserLikes[commentId];
 
@@ -1290,6 +1305,7 @@ export default function Feed() {
 
   const addComment = async (postId: string) => {
     if (!currentUserId) return;
+    if (myProfile?.role === "platform_admin") return;
 
     const text = commentInputs[postId]?.trim();
     if (!text) return;

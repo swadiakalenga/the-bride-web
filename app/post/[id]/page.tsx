@@ -13,6 +13,7 @@ import MediaPlayer from "../../components/feed/MediaPlayer";
 import type { Post, Comment } from "../../../lib/types";
 import { checkContentGuidelines } from "../../../lib/types";
 import { createNotification } from "../../../lib/notificationPush";
+import { useRedirectIfPlatformAdmin } from "../../../lib/auth/redirectIfPlatformAdmin";
 import LinkifiedText from "../../components/ui/LinkifiedText";
 import LinkPreviewCard from "../../components/feed/LinkPreviewCard";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
@@ -24,6 +25,7 @@ type LikeRow = {
 };
 
 export default function PostPage() {
+  useRedirectIfPlatformAdmin();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();

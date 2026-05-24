@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { useLanguage } from "../../lib/useLanguage";
+import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
 
 type ConversationRow = {
   id: string;
@@ -40,6 +41,7 @@ function formatConvTime(dateStr: string | null) {
 }
 
 export default function MessagesPage() {
+  useRedirectIfPlatformAdmin();
   const router = useRouter();
   const { t } = useLanguage();
   const [tab, setTab] = useState<"chats" | "requests">("chats");

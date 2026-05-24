@@ -13,6 +13,17 @@ export default function BottomNav({ unreadCount, onCompose }: BottomNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [selfCount, setSelfCount] = useState(0);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const { data } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
+      if (data?.role === "platform_admin") setIsPlatformAdmin(true);
+    })();
+  }, []);
 
   // Auto-fetch and subscribe to real-time notification count
   // Prefetch common routes so navigation feels instant
@@ -83,6 +94,9 @@ export default function BottomNav({ unreadCount, onCompose }: BottomNavProps) {
       if (channel) supabase.removeChannel(channel);
     };
   }, [unreadCount]);
+
+  // Never render for platform_admin — they use the dedicated admin sidebar
+  if (isPlatformAdmin) return null;
 
   const badgeCount = unreadCount !== undefined ? unreadCount : selfCount;
 

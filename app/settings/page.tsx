@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "../../lib/useLanguage";
+import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
 import { supabase } from "../../lib/supabase";
 
 export default function SettingsPage() {
+  useRedirectIfPlatformAdmin();
   const { lang } = useLanguage();
   const router = useRouter();
   const isFr = lang === "fr";

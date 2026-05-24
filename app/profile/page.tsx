@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { validateUpload } from "../../lib/validateUpload";
 import { useLanguage } from "../../lib/useLanguage";
+import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
 import BottomNav from "../components/ui/BottomNav";
 import Card from "../components/ui/Card";
 import FollowListModal from "../components/ui/FollowListModal";
@@ -46,6 +47,7 @@ type ChurchOption = {
 };
 
 export default function ProfilePage() {
+  useRedirectIfPlatformAdmin();
   const router = useRouter();
   const { t, lang } = useLanguage();
 

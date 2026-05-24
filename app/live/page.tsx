@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
 import type { LiveEvent } from "../../lib/types";
 import LiveEventCard from "../components/live/LiveEventCard";
 import BottomNav from "../components/ui/BottomNav";
@@ -27,6 +28,7 @@ function normaliseEvent(row: Record<string, unknown>): LiveEvent {
 type Section = { label: string; emoji: string; events: LiveEvent[] };
 
 export default function LiveDiscoveryPage() {
+  useRedirectIfPlatformAdmin();
   const router = useRouter();
   const [liveNow, setLiveNow]       = useState<LiveEvent[]>([]);
   const [scheduled, setScheduled]   = useState<LiveEvent[]>([]);

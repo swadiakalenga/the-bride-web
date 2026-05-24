@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
+import { useRedirectIfPlatformAdmin } from "../../../lib/auth/redirectIfPlatformAdmin";
 import BottomNav from "../../components/ui/BottomNav";
 import ConfirmDialog, { type ConfirmDialogOptions } from "../../components/ui/ConfirmDialog";
 
@@ -44,6 +45,7 @@ type ChurchInfo = {
 };
 
 export default function ChurchProfilePage() {
+  useRedirectIfPlatformAdmin();
   const params = useParams();
   const router = useRouter();
   const { t, lang } = useLanguage();

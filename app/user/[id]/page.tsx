@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
 import { createNotification } from "../../../lib/notificationPush";
+import { useRedirectIfPlatformAdmin } from "../../../lib/auth/redirectIfPlatformAdmin";
 import BottomNav from "../../components/ui/BottomNav";
 import Card from "../../components/ui/Card";
 import FollowListModal from "../../components/ui/FollowListModal";
@@ -35,6 +36,7 @@ type Church = {
 };
 
 export default function UserProfilePage() {
+  useRedirectIfPlatformAdmin();
   const params = useParams();
   const router = useRouter();
   const { t, lang } = useLanguage();
@@ -437,6 +439,9 @@ export default function UserProfilePage() {
       return;
     }
     if (currentUserId === profile.id) return;
+    // platform_admin accounts must not follow social users
+    const { data: myProf } = await supabase.from("profiles").select("role").eq("id", currentUserId).maybeSingle();
+    if (myProf?.role === "platform_admin") return;
 
     const { error } = isFollowing
       ? await supabase.from("follows").delete().eq("follower_id", currentUserId).eq("following_id", profile.id)
@@ -455,6 +460,9 @@ export default function UserProfilePage() {
       router.push("/login");
       return;
     }
+    // platform_admin accounts must not follow churches
+    const { data: myProf } = await supabase.from("profiles").select("role").eq("id", currentUserId).maybeSingle();
+    if (myProf?.role === "platform_admin") return;
 
     const { error } = isFollowingChurch
       ? await supabase.from("church_follows").delete().eq("user_id", currentUserId).eq("church_id", church.id)

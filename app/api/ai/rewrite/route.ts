@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const ACTIONS: Record<string, string> = {
   improve:
@@ -14,6 +15,22 @@ const ACTIONS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  // ── Auth: block platform_admin ────────────────────────────────────────────
+  const jwt = req.headers.get("Authorization")?.slice(7);
+  if (jwt) {
+    const db = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+    const { data: { user } } = await db.auth.getUser(jwt);
+    if (user) {
+      const { data: prof } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      if (prof?.role === "platform_admin") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "AI assistant is not configured." }, { status: 503 });
