@@ -55,6 +55,69 @@ function buildPushPayload(type: string, actorName: string): PushPayload {
   return map[type] ?? { title: "TheBride", body: "You have a new notification" };
 }
 
+// ── In-app debug overlay ──────────────────────────────────────────────────
+// Visible floating panel rendered in the app UI.
+// Enable by setting NEXT_PUBLIC_DEBUG_PUSH=true at build time.
+// Do NOT enable in production — remove the env var before the release build.
+
+const DEBUG_PUSH = process.env.NEXT_PUBLIC_DEBUG_PUSH === "true";
+
+function pushDebugLog(msg: string, ok = true): void {
+  // Always write to console regardless of DEBUG_PUSH
+  if (ok) {
+    console.log("[notify]", msg);
+  } else {
+    console.error("[notify]", msg);
+  }
+
+  if (!DEBUG_PUSH) return;
+  if (typeof document === "undefined") return;
+
+  let panel = document.getElementById("__push_debug_panel");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "__push_debug_panel";
+    panel.setAttribute(
+      "style",
+      "position:fixed;bottom:72px;left:6px;right:6px;z-index:99999;" +
+      "background:rgba(0,0,0,0.9);border-radius:10px;padding:8px 10px;" +
+      "font:11px/1.5 monospace;max-height:240px;overflow-y:auto;" +
+      "border:1px solid rgba(251,191,36,0.4);",
+    );
+
+    const hdr = document.createElement("div");
+    hdr.setAttribute("style", "display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;");
+
+    const title = document.createElement("span");
+    title.setAttribute("style", "color:#fbbf24;font-weight:bold;font-size:12px;");
+    title.textContent = "🔔 Push Debug";
+
+    const btn = document.createElement("button");
+    btn.textContent = "✕";
+    btn.setAttribute(
+      "style",
+      "background:none;border:none;color:#9ca3af;font-size:14px;cursor:pointer;padding:0 2px;line-height:1;",
+    );
+    btn.onclick = () => { document.getElementById("__push_debug_panel")?.remove(); };
+
+    hdr.appendChild(title);
+    hdr.appendChild(btn);
+    panel.appendChild(hdr);
+    document.body.appendChild(panel);
+  }
+
+  const line = document.createElement("div");
+  line.setAttribute(
+    "style",
+    `color:${ok ? "#4ade80" : "#f87171"};padding:1px 0;` +
+    "border-top:1px solid rgba(255,255,255,0.06);word-break:break-all;",
+  );
+  const ts = new Date().toISOString().slice(11, 23);
+  line.textContent = `${ts} ${ok ? "✓" : "✗"} ${msg}`;
+  panel.appendChild(line);
+  panel.scrollTop = panel.scrollHeight;
+}
+
 // ── Core helper ───────────────────────────────────────────────────────────
 
 export async function createNotification(params: NotificationParams): Promise<void> {
@@ -70,6 +133,8 @@ export async function createNotification(params: NotificationParams): Promise<vo
 
   // Never send to yourself
   if (!recipientUserId || recipientUserId === actorUserId) return;
+
+  pushDebugLog(`createNotification type=${type} recipient=${recipientUserId.slice(0, 8)}…`);
 
   // 1. Persist the notification row — select the id back so we can pass it
   //    to the push endpoint as proof of a legitimate notification.
@@ -89,9 +154,11 @@ export async function createNotification(params: NotificationParams): Promise<vo
     .single();
 
   if (error) {
-    console.error("[notification] insert error", { type, error });
+    pushDebugLog(`notification insert FAILED: ${error.message}`, false);
     return;
   }
+
+  pushDebugLog(`notification insert OK id=${notifRow.id.slice(0, 8)}…`);
 
   // 2. Fire push — non-blocking, never propagates failure to the caller
   void firePush(params, notifRow.id);
@@ -101,9 +168,17 @@ export async function createNotification(params: NotificationParams): Promise<vo
 
 async function firePush(params: NotificationParams, notificationId: string): Promise<void> {
   try {
-    // Need a valid session token to authenticate the API route
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
+    // Need a valid session token to authenticate the API route.
+    // Uses supabase.auth.getSession() which reads from localStorage in Capacitor WebView.
+    const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+
+    const hasToken = !!session?.access_token;
+    pushDebugLog(`session access_token: ${hasToken ? "YES" : "NO"}${sessionErr ? ` (err: ${sessionErr.message})` : ""}`, hasToken);
+
+    if (!hasToken) {
+      pushDebugLog("push aborted — no session token", false);
+      return;
+    }
 
     // Look up actor's display name for a personalised push body
     const { data: actor } = await supabase
@@ -122,21 +197,49 @@ async function firePush(params: NotificationParams, notificationId: string): Pro
     if (params.conversationId) data.conversation_id = params.conversationId;
     if (params.churchId)       data.church_id       = params.churchId;
 
-    await fetch("/api/push/send", {
+    // ── Absolute URL resolution ───────────────────────────────────────────
+    // CRITICAL: must be an absolute URL so the request reaches Vercel from
+    // both web browsers and Capacitor WebViews (where window.location.origin
+    // is "capacitor://localhost" or "https://localhost", not the Vercel host).
+    //
+    // Set NEXT_PUBLIC_SITE_URL=https://your-domain.com in Vercel env vars
+    // AND in .env.local so it is baked into the APK bundle at build time.
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
+
+    if (!siteUrl) {
+      pushDebugLog(
+        "NEXT_PUBLIC_SITE_URL is not set — push will fail in Capacitor (window.location.origin=" +
+        (typeof window !== "undefined" ? window.location.origin : "SSR") + ")",
+        false,
+      );
+      // Bail rather than use a Capacitor-local URL that will never reach Vercel
+      return;
+    }
+
+    const pushUrl = `${siteUrl}/api/push/send`;
+    pushDebugLog(`fetch → ${pushUrl}`);
+
+    const res = await fetch(pushUrl, {
       method: "POST",
       headers: {
         "Content-Type":  "application/json",
-        "Authorization": `Bearer ${session.access_token}`,
+        "Authorization": `Bearer ${session!.access_token}`,
       },
       body: JSON.stringify({
         user_id:         params.recipientUserId,
-        notification_id: notificationId,   // proof-of-legitimacy for the push endpoint
+        notification_id: notificationId,
         title,
         body,
         data,
       }),
     });
+
+    let responseBody = "";
+    try { responseBody = await res.text(); } catch { /* ignore */ }
+
+    pushDebugLog(`response ${res.status} ${res.ok ? "OK" : "ERR"} — ${responseBody.slice(0, 80)}`, res.ok);
   } catch (err) {
-    console.error("[push] delivery error", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    pushDebugLog(`push delivery error: ${msg}`, false);
   }
 }

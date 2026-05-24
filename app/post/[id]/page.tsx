@@ -12,6 +12,7 @@ import MediaGrid from "../../components/feed/MediaGrid";
 import MediaPlayer from "../../components/feed/MediaPlayer";
 import type { Post, Comment } from "../../../lib/types";
 import { checkContentGuidelines } from "../../../lib/types";
+import { createNotification } from "../../../lib/notificationPush";
 import LinkifiedText from "../../components/ui/LinkifiedText";
 import LinkPreviewCard from "../../components/feed/LinkPreviewCard";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
@@ -213,6 +214,17 @@ export default function PostPage() {
 
     if (inserted) {
       setComments((prev) => prev.map((c) => (c.id === tempId ? inserted : c)));
+
+      // Notify the post owner about the new comment
+      if (post && post.user_id !== currentUserId) {
+        void createNotification({
+          recipientUserId: post.user_id,
+          actorUserId: currentUserId!,
+          type: "comment",
+          postId,
+          commentId: inserted.id,
+        });
+      }
     }
   };
 
@@ -267,6 +279,18 @@ export default function PostPage() {
 
     if (inserted) {
       setComments((prev) => prev.map((c) => (c.id === tempId ? inserted : c)));
+
+      // Notify the parent comment's author about the reply
+      const parentComment = comments.find((c) => c.id === parentCommentId);
+      if (parentComment && parentComment.user_id !== currentUserId) {
+        void createNotification({
+          recipientUserId: parentComment.user_id,
+          actorUserId: currentUserId!,
+          type: "reply",
+          postId,
+          commentId: inserted.id,
+        });
+      }
     }
   };
 

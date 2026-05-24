@@ -523,12 +523,15 @@ export default function ChatPage() {
       });
 
       if (otherUser?.id) {
+        console.log("[chat] message saved — firing createNotification for", otherUser.id);
         void createNotification({
           recipientUserId: otherUser.id,
           actorUserId: me,
           type: "message",
           conversationId,
         });
+      } else {
+        console.warn("[chat] message saved but otherUser.id is null — notification skipped");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Send failed";
@@ -597,12 +600,15 @@ export default function ChatPage() {
       });
 
       if (otherUser?.id) {
+        console.log("[chat] media message saved — firing createNotification for", otherUser.id);
         void createNotification({
           recipientUserId: otherUser.id,
           actorUserId: me,
           type: "message",
           conversationId,
         });
+      } else {
+        console.warn("[chat] media message saved but otherUser.id is null — notification skipped");
       }
     } catch {
       setMessages((prev) =>

@@ -20,6 +20,7 @@ import LinkPreviewCard from "../components/feed/LinkPreviewCard";
 import { useLanguage } from "../../lib/useLanguage";
 import type { Post, Comment, Profile } from "../../lib/types";
 import { checkContentGuidelines } from "../../lib/types";
+import { createNotification } from "../../lib/notificationPush";
 import { compressBatch } from "../../lib/imageCompression";
 import { extractFirstUrl } from "../../lib/extractFirstUrl";
 import ConfirmDialog from "../components/ui/ConfirmDialog";
@@ -1175,6 +1176,17 @@ export default function Feed() {
         ...prev,
         [postId]: Math.max(0, (prev[postId] || 0) + (wasLiked ? 1 : -1)),
       }));
+    } else if (!wasLiked) {
+      // Notify post owner (only on like, not unlike)
+      const post = posts.find((p) => p.id === postId);
+      if (post && post.user_id !== currentUserId) {
+        void createNotification({
+          recipientUserId: post.user_id,
+          actorUserId: currentUserId,
+          type: "like",
+          postId,
+        });
+      }
     }
 
     loadUnreadNotificationCount();
@@ -1334,6 +1346,18 @@ export default function Feed() {
         ...prev,
         [postId]: (prev[postId] || []).map((c) => (c.id === tempId ? inserted : c)),
       }));
+
+      // Notify post owner about the new comment (skip if commenter is the post owner)
+      const post = posts.find((p) => p.id === postId);
+      if (post && post.user_id !== currentUserId) {
+        void createNotification({
+          recipientUserId: post.user_id,
+          actorUserId: currentUserId,
+          type: "comment",
+          postId,
+          commentId: inserted.id,
+        });
+      }
     }
 
     loadUnreadNotificationCount();
@@ -1397,6 +1421,18 @@ export default function Feed() {
         ...prev,
         [postId]: (prev[postId] || []).map((c) => (c.id === tempId ? inserted : c)),
       }));
+
+      // Notify the parent comment's author about the reply
+      const parentComment = (commentsByPost[postId] || []).find((c) => c.id === parentCommentId);
+      if (parentComment && parentComment.user_id !== currentUserId) {
+        void createNotification({
+          recipientUserId: parentComment.user_id,
+          actorUserId: currentUserId,
+          type: "reply",
+          postId,
+          commentId: inserted.id,
+        });
+      }
     }
 
     loadUnreadNotificationCount();

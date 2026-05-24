@@ -93,29 +93,35 @@ export async function POST(req: NextRequest) {
   // Use internal push secret for server-to-server calls — bypasses the
   // notification_id proof-of-legitimacy check (this route already verified
   // the caller is a church_admin with matching church_id above).
-  const internalSecret = process.env.INTERNAL_PUSH_SECRET ?? "";
+  const internalSecret = process.env.INTERNAL_PUSH_SECRET;
 
-  await Promise.allSettled(
-    recipients.map((f) =>
-      fetch(`${origin}/api/push/send`, {
-        method: "POST",
-        headers: {
-          "Content-Type":          "application/json",
-          "x-internal-push-secret": internalSecret,
-        },
-        body: JSON.stringify({
-          user_id: f.user_id,
-          title,
-          body: pushBody,
-          data: {
-            type: notification_type,
-            live_event_id,
-            church_id,
+  if (!internalSecret) {
+    console.warn("[live-notify] INTERNAL_PUSH_SECRET not set — push notifications skipped for live event");
+  } else {
+    await Promise.allSettled(
+      recipients.map((f) =>
+        fetch(`${origin}/api/push/send`, {
+          method: "POST",
+          headers: {
+            "Content-Type":           "application/json",
+            "x-internal-push-secret": internalSecret,
           },
+          body: JSON.stringify({
+            user_id: f.user_id,
+            title,
+            body: pushBody,
+            data: {
+              type: notification_type,
+              live_event_id,
+              church_id,
+            },
+          }),
+        }).catch((err) => {
+          console.error("[live-notify] push fetch error for recipient:", err);
         }),
-      }).catch(() => {}),
-    ),
-  );
+      ),
+    );
+  }
 
   console.log(`[live-notify] notified ${recipients.length} followers of ${church_id} — ${notification_type}`);
   return NextResponse.json({ notified: recipients.length });
