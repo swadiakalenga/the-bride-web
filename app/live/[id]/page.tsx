@@ -11,6 +11,7 @@ import AdminLiveControls from "../../components/live/AdminLiveControls";
 import { useLiveChat } from "../../../lib/hooks/useLiveChat";
 import { useLiveReactions } from "../../../lib/hooks/useLiveReactions";
 import { useViewerTracking } from "../../../lib/hooks/useViewerTracking";
+import { trackEvent } from "../../../lib/analytics/trackEvent";
 
 const EVENT_COLS = `
   id, church_id, created_by, title, description, thumbnail_url,
@@ -89,6 +90,11 @@ export default function LiveWatchPage() {
         if (mounted && profile?.role === "church_admin" && profile.church_id === ev.church_id) {
           setIsAdmin(true);
         }
+      }
+
+      // Track live join for non-admin viewers
+      if (me && ev.church_id) {
+        trackEvent("live_join", { entity_type: "live_event", entity_id: liveEventId, church_id: ev.church_id });
       }
 
       setLoading(false);

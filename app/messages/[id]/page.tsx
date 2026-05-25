@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { validateUpload } from "../../../lib/validateUpload";
 import { createNotification } from "../../../lib/notificationPush";
+import { trackEvent } from "../../../lib/analytics/trackEvent";
 import { useLanguage } from "../../../lib/useLanguage";
 import EmojiPicker from "../../components/ui/EmojiPicker";
 import ImageLightbox from "../../components/ui/ImageLightbox";
@@ -526,6 +527,7 @@ export default function ChatPage() {
 
       if (otherUser?.id) {
         console.log("[chat] message saved — firing createNotification for", otherUser.id);
+        trackEvent("message_send");
         void createNotification({
           recipientUserId: otherUser.id,
           actorUserId: me,

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { useLanguage } from "../../lib/useLanguage";
 import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
+import { trackEvent } from "../../lib/analytics/trackEvent";
 
 const CATEGORIES = [
   "bug",
@@ -132,6 +133,7 @@ export default function HelpPage() {
       return;
     }
 
+    trackEvent("support_ticket_created");
     setSubmittedId(data.id);
     setSubmitted(true);
     setSubject("");

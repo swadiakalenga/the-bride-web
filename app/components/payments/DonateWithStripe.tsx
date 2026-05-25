@@ -5,6 +5,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import dynamic from "next/dynamic";
 import { supabase } from "../../../lib/supabase";
 import { STRIPE_CURRENCIES } from "../../../lib/stripe";
+import { trackEvent } from "../../../lib/analytics/trackEvent";
 
 const AddCardSection = dynamic(() => import("./AddCardSection"), { ssr: false });
 
@@ -139,6 +140,7 @@ export default function DonateWithStripe({
     }
 
     if (data.status === "succeeded") {
+      trackEvent("donation_completed", { entity_type: "donation", entity_id: data.donationId });
       setDonationId(data.donationId ?? "");
       onSuccess?.(data.donationId ?? "");
       setSubmitting(false);
@@ -157,6 +159,7 @@ export default function DonateWithStripe({
       if (confirmErr) {
         setError(confirmErr.message ?? "Authentication failed");
       } else if (paymentIntent?.status === "succeeded") {
+        trackEvent("donation_completed", { entity_type: "donation", entity_id: data.donationId });
         setDonationId(data.donationId ?? "");
         onSuccess?.(data.donationId ?? "");
       } else {

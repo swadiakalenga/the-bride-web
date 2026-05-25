@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { supabase } from "../../../lib/supabase";
 import type { LiveEvent } from "../../../lib/types";
+import { trackEvent } from "../../../lib/analytics/trackEvent";
 
 const RTMP_SERVER = "rtmps://global-live.mux.com:443/app";
 
@@ -59,6 +60,7 @@ export default function AdminLiveControls({ event, onEventUpdated }: Props) {
       const result = await callApi("/api/live/start");
       setWorking(false);
       if (!result.ok) { setError(result.error ?? "Failed to go live"); return; }
+      trackEvent("live_start", { entity_type: "live_event", entity_id: event.id, church_id: event.church_id });
       onEventUpdated({ status: "live", started_at: new Date().toISOString() });
     } else {
       // Legacy manual flow — requires hls_url pre-set
@@ -76,6 +78,7 @@ export default function AdminLiveControls({ event, onEventUpdated }: Props) {
         .single();
       setWorking(false);
       if (err) { setError(err.message); return; }
+      trackEvent("live_start", { entity_type: "live_event", entity_id: event.id, church_id: event.church_id });
       onEventUpdated(data as Partial<LiveEvent>);
 
       // Notify followers

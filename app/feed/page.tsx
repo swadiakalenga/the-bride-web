@@ -21,6 +21,7 @@ import { useLanguage } from "../../lib/useLanguage";
 import type { Post, Comment, Profile } from "../../lib/types";
 import { checkContentGuidelines } from "../../lib/types";
 import { createNotification } from "../../lib/notificationPush";
+import { trackEvent } from "../../lib/analytics/trackEvent";
 import { compressBatch } from "../../lib/imageCompression";
 import { extractFirstUrl } from "../../lib/extractFirstUrl";
 import ConfirmDialog from "../components/ui/ConfirmDialog";
@@ -1136,6 +1137,7 @@ export default function Feed() {
     if (audioInputRef.current) audioInputRef.current.value = "";
     if (videoInputRef.current) videoInputRef.current.value = "";
 
+    trackEvent("post_create");
     loadPosts();
     loadUnreadNotificationCount();
   };
@@ -1191,6 +1193,7 @@ export default function Feed() {
         [postId]: Math.max(0, (prev[postId] || 0) + (wasLiked ? 1 : -1)),
       }));
     } else if (!wasLiked) {
+      trackEvent("post_like", { entity_type: "post", entity_id: postId });
       // Notify post owner (only on like, not unlike)
       const post = posts.find((p) => p.id === postId);
       if (post && post.user_id !== currentUserId) {
@@ -1362,6 +1365,8 @@ export default function Feed() {
         ...prev,
         [postId]: (prev[postId] || []).map((c) => (c.id === tempId ? inserted : c)),
       }));
+
+      trackEvent("comment_create", { entity_type: "post", entity_id: postId });
 
       // Notify post owner about the new comment (skip if commenter is the post owner)
       const post = posts.find((p) => p.id === postId);

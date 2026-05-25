@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { useLanguage } from "../../lib/useLanguage";
 import type { Lang } from "../../lib/i18n";
 import Logo from "../components/ui/Logo";
+import { trackEvent } from "../../lib/analytics/trackEvent";
 
 type LoginMode = "password" | "otp";
 
@@ -67,6 +68,7 @@ export default function LoginPage() {
     const uid = sessionData.session?.user?.id;
     if (uid) {
       const { data: prof } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
+      if (prof?.role !== "platform_admin") trackEvent("login");
       window.location.href = prof?.role === "platform_admin" ? "/admin" : "/feed";
     } else {
       window.location.href = "/feed";
@@ -134,6 +136,7 @@ export default function LoginPage() {
     const uid = sessionData.session?.user?.id;
     if (uid) {
       const { data: prof } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
+      if (prof?.role !== "platform_admin") trackEvent("login");
       window.location.href = prof?.role === "platform_admin" ? "/admin" : "/feed";
     } else {
       window.location.href = "/feed";

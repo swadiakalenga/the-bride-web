@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { useLanguage } from "../../../lib/useLanguage";
 import { createNotification } from "../../../lib/notificationPush";
+import { trackEvent } from "../../../lib/analytics/trackEvent";
 import { useRedirectIfPlatformAdmin } from "../../../lib/auth/redirectIfPlatformAdmin";
 import BottomNav from "../../components/ui/BottomNav";
 import Card from "../../components/ui/Card";
@@ -452,6 +453,7 @@ export default function UserProfilePage() {
       return;
     }
 
+    if (!isFollowing) trackEvent("follow_user", { entity_type: "user", entity_id: profile.id });
     loadPage();
   };
 
@@ -473,6 +475,7 @@ export default function UserProfilePage() {
       return;
     }
 
+    if (!isFollowingChurch) trackEvent("follow_church", { entity_type: "church", entity_id: church.id, church_id: church.id });
     loadPage();
   };
 
