@@ -312,7 +312,7 @@ export default function ChurchProfilePage() {
               {/* Cover */}
               <div className="relative h-52 overflow-hidden bg-gradient-to-br from-amber-600 via-amber-400 to-amber-200">
                 {church.cover_url && (
-                  <img src={church.cover_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  <img src={church.cover_url} alt="" loading="eager" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
                 )}
                 {isAdmin && (
                   <label className="absolute bottom-3 right-3 flex cursor-pointer items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm hover:bg-black/60 transition">
@@ -327,7 +327,7 @@ export default function ChurchProfilePage() {
                 {/* Avatar */}
                 <div className="relative -mt-12 mb-3 w-fit">
                   {church.avatar_url ? (
-                    <img src={church.avatar_url} alt={church.name} className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-md" />
+                    <img src={church.avatar_url} alt={church.name} loading="eager" decoding="async" className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-md" />
                   ) : (
                     <div className="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-white bg-amber-100 text-4xl shadow-md">⛪</div>
                   )}

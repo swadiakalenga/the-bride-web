@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { useRedirectIfPlatformAdmin } from "../../lib/auth/redirectIfPlatformAdmin";
@@ -33,14 +33,23 @@ export default function SearchPage() {
   const [followedChurchIds, setFollowedChurchIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [uiMessage, setUiMessage] = useState("");
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     loadCurrentUser();
   }, []);
 
+  // Debounce search: wait 300 ms after the user stops typing before hitting Supabase.
+  // Previously fired a query on every keystroke (2 round-trips per character).
   useEffect(() => {
-    searchAll();
-  }, [query, currentUserId]);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      searchAll();
+    }, 300);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [query, currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadCurrentUser() {
     const { data } = await supabase.auth.getUser();
@@ -138,6 +147,8 @@ export default function SearchPage() {
         <img
           src={profile.avatar_url}
           alt={profile.full_name || "User"}
+          loading="lazy"
+          decoding="async"
           className="h-12 w-12 rounded-full border border-gray-200 object-cover"
         />
       );

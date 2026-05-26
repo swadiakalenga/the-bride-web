@@ -95,6 +95,9 @@ export default function Feed() {
 
   const [commentLikeCounts, setCommentLikeCounts] = useState<CommentLikeMap>({});
   const [commentUserLikes, setCommentUserLikes] = useState<CommentUserLikeMap>({});
+  // Lightweight per-post comment counts loaded on initial feed fetch.
+  // Full comment content is loaded on-demand when a post's comment section is opened.
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
 
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -113,6 +116,8 @@ export default function Feed() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const viewedPostsRef = useRef(new Set<string>());
   const tempIdCounter = useRef(0);
+  // Cache followed church IDs so loadLiveStreams doesn't re-fetch them on every 45-second poll.
+  const followedChurchIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     loadCurrentUser();
@@ -164,10 +169,11 @@ export default function Feed() {
     }
   }, [currentUserId, feedType, myProfile?.church_id, myProfile?.role]);
 
-  // Poll live streams every 15s when on church feed so new streams appear automatically
+  // Poll live streams every 45 s when on church feed so new streams appear automatically.
+  // 15 s was too aggressive — 4 queries/poll * 4 polls/min = 16 queries/min per user on church feed.
   useEffect(() => {
     if (!currentUserId || feedType !== "church") return;
-    const interval = setInterval(() => loadLiveStreams(), 15000);
+    const interval = setInterval(() => loadLiveStreams(), 45000);
     return () => clearInterval(interval);
   }, [currentUserId, feedType, myProfile?.church_id]);
 
@@ -200,13 +206,13 @@ export default function Feed() {
             const postId = (entry.target as HTMLElement).dataset.postId;
             if (postId && !viewedPostsRef.current.has(postId)) {
               viewedPostsRef.current.add(postId);
-              supabase.auth.getSession().then(({ data: { session } }) => {
-                if (!session?.user) return;
+              // currentUserId is already in state — no need for an extra getSession() call
+              // per scroll event (was firing up to 15 concurrent auth requests on fast scroll).
+              if (currentUserId) {
                 supabase
                   .from("post_views")
-                  .upsert({ post_id: postId, user_id: session.user.id }, { ignoreDuplicates: true })
+                  .upsert({ post_id: postId, user_id: currentUserId }, { ignoreDuplicates: true })
                   .then(() => {
-                    // Refresh count from DB after successful insert
                     supabase
                       .from("post_views")
                       .select("post_id")
@@ -217,7 +223,7 @@ export default function Feed() {
                         }
                       });
                   });
-              });
+              }
               // Optimistic +1 while DB records
               setViewCounts((prev) => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
             }
@@ -302,6 +308,7 @@ export default function Feed() {
   const clearFeedState = () => {
     setPosts([]);
     setCommentsByPost({});
+    setCommentCounts({});
     setLikeCounts({});
     setUserLikes({});
     setShareCounts({});
@@ -554,12 +561,12 @@ export default function Feed() {
       setSharedByMap(newSharedByMap);
     }
 
-    const comments = await loadComments(postList, merge);
-
+    // Run all secondary queries in parallel — comments (counts only) no longer block this.
     await Promise.all([
+      loadCommentCounts(postList, merge),
       loadLikes(postList, merge),
       loadShares(postList, merge),
-      loadProfiles(postList, comments, sharerIds, merge),
+      loadProfiles(postList, undefined, sharerIds, merge),
       loadViewCounts(postList.map((p) => p.id)),
     ]);
 
@@ -659,72 +666,78 @@ export default function Feed() {
     }
   };
 
-  const loadComments = async (postList: Post[], merge = false) => {
+  // Lightweight: fetches only post_id to build comment badge counts.
+  // Replaces the old loadComments which eagerly fetched all comment content on every page load.
+  const loadCommentCounts = async (postList: Post[], merge = false) => {
     const ids = postList.map((p) => p.id);
-
     if (ids.length === 0) {
-      if (!merge) { setCommentsByPost({}); setCommentLikeCounts({}); setCommentUserLikes({}); }
-      return {};
+      if (!merge) setCommentCounts({});
+      return;
     }
+    const { data } = await supabase
+      .from("comments")
+      .select("post_id")
+      .in("post_id", ids)
+      .limit(500); // safety cap: ~33 comments per post avg at page size 15
+    const counts: Record<string, number> = {};
+    (data || []).forEach((row) => { counts[row.post_id] = (counts[row.post_id] || 0) + 1; });
+    if (merge) {
+      setCommentCounts((prev) => ({ ...prev, ...counts }));
+    } else {
+      setCommentCounts(counts);
+    }
+  };
 
+  // On-demand: fetches full comment content + likes + commenter profiles for one post.
+  // Called the first time a user opens a post's comment section.
+  const loadCommentsForPost = async (postId: string) => {
     const { data, error } = await supabase
       .from("comments")
-      .select("*")
-      .in("post_id", ids)
-      .order("created_at", { ascending: true });
+      .select("id, post_id, user_id, parent_comment_id, content, author_name, created_at")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true })
+      .limit(100);
 
-    if (error) {
-      setErrorMessage(`Load comments failed: ${error.message}`);
-      return {};
+    if (error || !data) return;
+
+    setCommentsByPost((prev) => ({ ...prev, [postId]: data }));
+    // Update count to reflect what was actually loaded
+    setCommentCounts((prev) => ({ ...prev, [postId]: data.length }));
+
+    // Fetch commenter profiles we don't already have
+    const missingIds = [...new Set(data.map((c) => c.user_id))].filter((id) => !profilesById[id]);
+    if (missingIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, role, church_id")
+        .in("id", missingIds);
+      if (profiles) {
+        setProfilesById((prev) => {
+          const next = { ...prev };
+          profiles.forEach((p) => { next[p.id] = p; });
+          return next;
+        });
+      }
     }
 
-    const grouped: CommentMap = {};
+    const commentIds = data.map((c) => c.id);
+    if (commentIds.length === 0) return;
 
-    data?.forEach((c) => {
-      if (!grouped[c.post_id]) grouped[c.post_id] = [];
-      grouped[c.post_id].push(c);
-    });
-
-    if (merge) {
-      setCommentsByPost((prev) => ({ ...prev, ...grouped }));
-    } else {
-      setCommentsByPost(grouped);
-    }
-
-    const commentIds = (data || []).map((c) => c.id);
-
-    if (commentIds.length === 0) {
-      if (!merge) { setCommentLikeCounts({}); setCommentUserLikes({}); }
-      return grouped;
-    }
-
-    const { data: likesData, error: likesError } = await supabase
+    const { data: likesData } = await supabase
       .from("comment_likes")
       .select("comment_id, user_id")
       .in("comment_id", commentIds);
 
-    if (likesError) {
-      setErrorMessage(`Load comment likes failed: ${likesError.message}`);
-      return grouped;
-    }
-
-    const counts: CommentLikeMap = {};
-    const userMap: CommentUserLikeMap = {};
-
-    likesData?.forEach((like) => {
-      counts[like.comment_id] = (counts[like.comment_id] || 0) + 1;
-      if (like.user_id === currentUserId) userMap[like.comment_id] = true;
-    });
-
-    if (merge) {
+    if (likesData) {
+      const counts: CommentLikeMap = {};
+      const userMap: CommentUserLikeMap = {};
+      likesData.forEach((like) => {
+        counts[like.comment_id] = (counts[like.comment_id] || 0) + 1;
+        if (like.user_id === currentUserId) userMap[like.comment_id] = true;
+      });
       setCommentLikeCounts((prev) => ({ ...prev, ...counts }));
       setCommentUserLikes((prev) => ({ ...prev, ...userMap }));
-    } else {
-      setCommentLikeCounts(counts);
-      setCommentUserLikes(userMap);
     }
-
-    return grouped;
   };
 
   const loadViewCounts = async (postIds: string[]) => {
@@ -842,13 +855,17 @@ export default function Feed() {
   async function loadLiveStreams() {
     if (!currentUserId) return;
 
-    // Get church IDs the user follows (plus own church if church admin)
-    const { data: churchFollows } = await supabase
-      .from("church_follows")
-      .select("church_id")
-      .eq("user_id", currentUserId);
+    // Fetch church follows only on first call; reuse the cached ref on subsequent polls
+    // so the 45-second interval doesn't re-issue this query each time.
+    if (followedChurchIdsRef.current.length === 0) {
+      const { data: churchFollows } = await supabase
+        .from("church_follows")
+        .select("church_id")
+        .eq("user_id", currentUserId);
+      followedChurchIdsRef.current = (churchFollows || []).map((f) => f.church_id as string);
+    }
 
-    const churchIds = (churchFollows || []).map((f) => f.church_id);
+    const churchIds = [...followedChurchIdsRef.current];
     if (myProfile?.church_id) churchIds.push(myProfile.church_id);
 
     const uniqueIds = [...new Set(churchIds.filter(Boolean))];
@@ -1337,6 +1354,8 @@ export default function Feed() {
       ...prev,
       [postId]: [...(prev[postId] || []), optimistic],
     }));
+    // Optimistic count increment so badge stays accurate before server confirms
+    setCommentCounts((prev) => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
 
     const { data: inserted, error } = await supabase
       .from("comments")
@@ -1355,6 +1374,7 @@ export default function Feed() {
         ...prev,
         [postId]: (prev[postId] || []).filter((c) => c.id !== tempId),
       }));
+      setCommentCounts((prev) => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 1) - 1) }));
       setCommentInputs((prev) => ({ ...prev, [postId]: text }));
       setErrorMessage(`Comment failed: ${error.message}`);
       return;
@@ -1490,10 +1510,13 @@ export default function Feed() {
   };
 
   const toggleCommentBox = (postId: string) => {
-    setShowCommentBox((prev) => ({
-      ...prev,
-      [postId]: !prev[postId],
-    }));
+    const willOpen = !showCommentBox[postId];
+    setShowCommentBox((prev) => ({ ...prev, [postId]: !prev[postId] }));
+
+    // Load full comment content the first time this post's section is opened
+    if (willOpen && !commentsByPost[postId]) {
+      void loadCommentsForPost(postId);
+    }
 
     setTimeout(() => {
       const input = document.getElementById(`comment-${postId}`) as HTMLInputElement | null;
@@ -1583,6 +1606,8 @@ export default function Feed() {
         <img
           src={avatarUrl}
           alt={name}
+          loading="lazy"
+          decoding="async"
           className={`${size} rounded-full object-cover border`}
         />
       );
@@ -1608,7 +1633,7 @@ export default function Feed() {
           {/* Left: avatar */}
           <button onClick={() => router.push("/profile")} className="flex-shrink-0">
             {myAvatar ? (
-              <img src={myAvatar} alt={myName} className="h-9 w-9 rounded-full border-2 border-amber-400 object-cover" />
+              <img src={myAvatar} alt={myName} loading="eager" decoding="async" className="h-9 w-9 rounded-full border-2 border-amber-400 object-cover" />
             ) : (
               <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-amber-400 bg-amber-50 text-sm font-bold text-amber-600">
                 {myName.charAt(0).toUpperCase()}
@@ -1753,7 +1778,7 @@ export default function Feed() {
                     {/* Church avatar */}
                     <div className="absolute top-3 left-3 flex items-center gap-2">
                       {stream.church_avatar ? (
-                        <img src={stream.church_avatar} alt="" className={`h-8 w-8 rounded-full object-cover border-2 ${isLiveNow ? "border-red-500" : "border-gray-500"}`} />
+                        <img src={stream.church_avatar} alt="" loading="lazy" decoding="async" className={`h-8 w-8 rounded-full object-cover border-2 ${isLiveNow ? "border-red-500" : "border-gray-500"}`} />
                       ) : (
                         <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-gray-700 text-xs font-bold text-white ${isLiveNow ? "border-red-500" : "border-gray-500"}`}>
                           {(stream.church_name || "C").charAt(0).toUpperCase()}
@@ -2097,7 +2122,11 @@ export default function Feed() {
           <div className="mt-6 space-y-4">
             {posts.map((post) => {
               const allTopLevelComments = getTopLevelComments(post.id);
-              const commentCount = allTopLevelComments.length;
+              // Use server-fetched count before comments are lazily loaded; switch to
+              // local top-level count once content is in state (avoids badge flash to 0).
+              const commentCount = commentsByPost[post.id] !== undefined
+                ? allTopLevelComments.length
+                : (commentCounts[post.id] || 0);
               const visibleComments = getVisibleTopLevelComments(post.id);
 
               return (
@@ -2263,7 +2292,8 @@ export default function Feed() {
                         </div>
                       </div>
 
-                      {commentCount > 0 && (
+                      {/* Only render the comment thread once content is lazily loaded */}
+                      {(commentsByPost[post.id]?.length || 0) > 0 && (
                         <div className="mt-4 border-t border-gray-200 pt-3">
                           <div className="space-y-3">
                             {visibleComments.map((comment) => {

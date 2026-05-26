@@ -758,7 +758,7 @@ export default function ChatPage() {
                 className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${active ? "bg-amber-50" : "hover:bg-gray-50"}`}
               >
                 {conversation.other_user_avatar ? (
-                  <img src={conversation.other_user_avatar} alt="" className="h-11 w-11 rounded-full object-cover" />
+                  <img src={conversation.other_user_avatar} alt="" loading="eager" decoding="async" className="h-11 w-11 rounded-full object-cover" />
                 ) : (
                   <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 font-bold text-white">
                     {avatarLetter(conversation.other_user_name)}
@@ -801,7 +801,7 @@ export default function ChatPage() {
             className="flex flex-1 items-center gap-3"
           >
             {otherUser?.avatar_url ? (
-              <img src={otherUser.avatar_url} alt="" className="h-10 w-10 rounded-full border-2 border-amber-200 object-cover" />
+              <img src={otherUser.avatar_url} alt="" loading="eager" decoding="async" className="h-10 w-10 rounded-full border-2 border-amber-200 object-cover" />
             ) : (
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-sm font-bold text-white">
                 {avatarLetter(otherUser?.full_name || null)}
@@ -903,7 +903,7 @@ export default function ChatPage() {
             {!loadError && messages.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16">
                 {otherUser?.avatar_url ? (
-                  <img src={otherUser.avatar_url} alt="" className="h-20 w-20 rounded-full border-4 border-amber-100 object-cover" />
+                  <img src={otherUser.avatar_url} alt="" loading="eager" decoding="async" className="h-20 w-20 rounded-full border-4 border-amber-100 object-cover" />
                 ) : (
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-3xl font-bold text-white">
                     {avatarLetter(otherUser?.full_name || null)}
@@ -943,7 +943,7 @@ export default function ChatPage() {
                       <div className="w-8 flex-shrink-0">
                         {isLastInGroup && (
                           otherUser?.avatar_url ? (
-                            <img src={otherUser.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+                            <img src={otherUser.avatar_url} alt="" loading="lazy" decoding="async" className="h-8 w-8 rounded-full object-cover" />
                           ) : (
                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-xs font-bold text-white">
                               {avatarLetter(otherUser?.full_name || null)}

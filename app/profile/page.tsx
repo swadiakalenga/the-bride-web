@@ -510,7 +510,7 @@ export default function ProfilePage() {
                 <>
                   <div className="flex flex-col items-center">
                     {profile.avatar_url ? (
-                      <img src={profile.avatar_url} alt="Profile" className="h-28 w-28 rounded-full border object-cover" />
+                      <img src={profile.avatar_url} alt="Profile" loading="eager" decoding="async" className="h-28 w-28 rounded-full border object-cover" />
                     ) : (
                       <div className="flex h-28 w-28 items-center justify-center rounded-full border bg-gray-200 text-4xl font-bold text-gray-600">
                         {avatarLetter}
@@ -642,7 +642,7 @@ export default function ProfilePage() {
                   <div className="mt-6 flex flex-col items-center">
                     <div className="relative">
                       {profile.avatar_url ? (
-                        <img src={profile.avatar_url} alt="Profile" className="h-28 w-28 rounded-full border object-cover" />
+                        <img src={profile.avatar_url} alt="Profile" loading="eager" decoding="async" className="h-28 w-28 rounded-full border object-cover" />
                       ) : (
                         <div className="flex h-28 w-28 items-center justify-center rounded-full border bg-gray-200 text-4xl font-bold text-gray-600">
                           {avatarLetter}

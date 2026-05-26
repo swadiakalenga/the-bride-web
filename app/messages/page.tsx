@@ -462,7 +462,7 @@ export default function MessagesPage() {
                   <div key={req.id} className="px-4 py-4">
                     <div className="flex items-start gap-3">
                       {req.sender_avatar ? (
-                        <img src={req.sender_avatar} alt="" className="h-12 w-12 rounded-full object-cover flex-shrink-0" />
+                        <img src={req.sender_avatar} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-full object-cover flex-shrink-0" />
                       ) : (
                         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 font-bold text-white">
                           {avatarLetter(req.sender_name)}
@@ -541,7 +541,7 @@ export default function MessagesPage() {
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-gray-50"
                 >
                   {user.avatar_url ? (
-                    <img src={user.avatar_url} alt="" className="h-11 w-11 rounded-full object-cover flex-shrink-0" />
+                    <img src={user.avatar_url} alt="" loading="lazy" decoding="async" className="h-11 w-11 rounded-full object-cover flex-shrink-0" />
                   ) : (
                     <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 font-bold text-white">
                       {avatarLetter(user.full_name)}
